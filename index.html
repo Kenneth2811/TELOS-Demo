@@ -2,7 +2,8 @@
 <html lang="en" class="scroll-smooth">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#1e1b4b">
   <title>TELOS School Assessment & Reporting System</title>
   <!-- Favicon -->
   <link rel="icon" type="image/png" sizes="16x16" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAB5UlEQVR4nH2SQWpUQRCGv6rufk58mThu3JgjiIigm4RAUK/hCURkooKrbAVBQQ0MLl16AUEFQZIDiCtxIagbcREmMRMzb7rKxZuZNzGDBU11V3f99Xf9JZubr4r32/3Hw1G6mXNVgiuAAD7Xi6mmgyKNXq6vLnVldf3Fs2zlrWo4AHFmkyeJJ01IqUT093O5stKr3KOCCSA529yUiQVVEHcILmSLIFHEGI2Ms50Wjx5eZ6GVcCAEBSBnQxAO/1Tce/CW3d0jidEER+OEkptTFIHLl87/l0GRAu4OKGDE+r9OiIH+3hHd+68xc5aX23RvrwLw5OkO337soSr0944IQXA3RITogDuIwHCYefPuKweDIRcvnOPunbqFH7a/8/HTT8qyoNWKqIxb7U481luBpfYpYlIWF4tpvN1OdM4scHohUo2sUUfqjxyTJ5uRs5HNp9FsXsetkXlielJnAf9H/8lQTA+NxenUnMTAxhUdcPHm8hjA9MkMkguq9QJq77NUZB5AU15VGBxWfP7yC6j3GoR5Qy5XV3qVuSq41DqMIR3M8hRQRWZ4uoO6SDYtCu2lVGrDq64gAiFEQgiINBxrr5JSqanQnl5b62ykONgKsdgXEZMxDxGfWbNnsRjjftCDrRtrnY2/39fH8oVv77sAAAAASUVORK5CYII=">
@@ -78,6 +79,117 @@
       .telos-print-footer .tpf-right { text-align: right; }
       .telos-print-footer strong { color: #0f172a; letter-spacing: 0.12em; font-weight: 800; }
     }
+
+    /* ================= RESPONSIVE LAYER (phones, tablets, laptops, desktops) =================
+       Everything below is scoped to screen media and to #app-screen / #landing-screen / #auth-screen,
+       so printing and the off-screen report-card PDF renderers are unaffected. */
+    html { -webkit-text-size-adjust: 100%; }
+    body { overflow-x: hidden; }
+    img, canvas, video { max-width: 100%; }
+    #telos-mobilebar, #telos-drawer-overlay { display: none; }
+
+    /* ---- Tablets & phones: sidebar becomes a slide-in drawer (below 1024px) ---- */
+    @media screen and (max-width: 1023.98px) {
+      #app-screen { flex-direction: column !important; }
+      #telos-mobilebar {
+        display: flex; position: sticky; top: 0; z-index: 45; align-items: center; gap: .75rem;
+        padding: calc(env(safe-area-inset-top, 0px) + .6rem) calc(env(safe-area-inset-right, 0px) + 1rem) .6rem calc(env(safe-area-inset-left, 0px) + 1rem);
+        background: #1e1b4b; color: #fff; box-shadow: 0 2px 10px rgba(30,27,75,.35);
+      }
+      #telos-mobilebar button { display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:.75rem; background:rgba(255,255,255,.1); color:#fff; flex:none; }
+      #telos-mobilebar button:active { background: rgba(255,255,255,.22); }
+      #telos-mobilebar .tmb-title { min-width:0; flex:1; }
+      #telos-mobilebar .tmb-brand { font-weight:900; letter-spacing:.04em; font-size:1rem; line-height:1.1; }
+      #telos-mobilebar .tmb-page { font-size:.72rem; opacity:.8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+      #app-sidebar {
+        position: fixed !important; top: 0; bottom: 0; left: 0; z-index: 60;
+        width: min(84vw, 20rem) !important; height: 100dvh; max-height: 100dvh;
+        transform: translateX(-102%); transition: transform .25s ease;
+        box-shadow: none; overflow-y: auto; -webkit-overflow-scrolling: touch;
+        padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+      }
+      #app-sidebar nav { max-height: none !important; overflow: visible !important; }
+      body.telos-drawer-open #app-sidebar { transform: translateX(0); box-shadow: 8px 0 40px rgba(0,0,0,.4); }
+      #telos-drawer-overlay {
+        display: block; position: fixed; inset: 0; z-index: 55; background: rgba(15,23,42,.55);
+        backdrop-filter: blur(2px); opacity: 0; pointer-events: none; transition: opacity .25s ease;
+      }
+      body.telos-drawer-open #telos-drawer-overlay { opacity: 1; pointer-events: auto; }
+      body.telos-drawer-open { overflow: hidden; }
+      #app-screen > main { min-height: 0 !important; width: 100%; max-width: 100vw; }
+    }
+
+    /* ---- Tablet (portrait/landscape) refinements ---- */
+    @media screen and (min-width: 640px) and (max-width: 1023.98px) {
+      #app-screen > main { padding: 1.5rem !important; }
+    }
+
+    /* ---- Phones ---- */
+    @media screen and (max-width: 639.98px) {
+      #app-screen > main { padding: .85rem calc(.85rem + env(safe-area-inset-right,0px)) calc(1rem + env(safe-area-inset-bottom,0px)) calc(.85rem + env(safe-area-inset-left,0px)) !important; }
+      #app-screen main > div > header { padding: .85rem !important; margin-bottom: 1rem !important; }
+      #page-title { font-size: 1.15rem !important; line-height: 1.3; }
+      #app-screen main > div > header > div:last-child { width: 100%; align-items: flex-start !important; }
+      #current-academic-term-display { white-space: normal !important; }
+
+      /* Cards & panels breathe less */
+      #app-screen .p-6 { padding: 1rem !important; }
+      #app-screen .p-8 { padding: 1rem !important; }
+      #app-screen .gap-6 { gap: 1rem !important; }
+      #app-screen .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem !important; }
+      #app-screen .text-3xl { font-size: 1.6rem !important; }
+
+      /* Multi-column form/grid blocks collapse to one column on phones (2-col stat pairs stay 2) */
+      #app-screen .grid.md\:grid-cols-4, #app-screen .grid.md\:grid-cols-3, #app-screen .grid.lg\:grid-cols-3,
+      #app-screen .grid.lg\:grid-cols-4, #app-screen .grid.md\:grid-cols-2:not(.grid-cols-2) { grid-template-columns: 1fr !important; }
+
+      /* Toolbars: buttons & controls wrap and go full-width where sensible */
+      #app-screen .flex.flex-wrap > select, #app-screen .flex.flex-wrap > input:not([type=checkbox]):not([type=radio]) { flex: 1 1 9rem; min-width: 0; }
+      #app-screen main button { min-height: 40px; }
+
+      /* Modals become bottom sheets */
+      [id$="-modal"].fixed { padding: 0 !important; align-items: flex-end !important; }
+      [id$="-modal"].fixed > div {
+        width: 100% !important; max-width: 100% !important; max-height: 94dvh !important; overflow-y: auto;
+        border-radius: 1.25rem 1.25rem 0 0 !important; padding: 1.1rem !important;
+        padding-bottom: calc(1.1rem + env(safe-area-inset-bottom,0px)) !important; -webkit-overflow-scrolling: touch;
+      }
+      [id$="-modal"].fixed .grid.grid-cols-2 { grid-template-columns: 1fr !important; }
+      [id$="-modal"].fixed .flex.justify-end, [id$="-modal"].fixed .flex.items-center.justify-end { flex-wrap: wrap; }
+      [id$="-modal"].fixed .flex.justify-end > button { flex: 1 1 8rem; }
+
+      /* Landing page */
+      #landing-screen header > div { height: 4rem !important; padding-left: 1rem !important; padding-right: 1rem !important; }
+      #landing-screen header .text-xl { font-size: 1.05rem !important; }
+      #landing-screen header button { padding: .55rem .8rem !important; font-size: .75rem !important; }
+      #landing-screen header .text-\[10px\] { display: none; }
+      #landing-screen section { padding-left: 0; padding-right: 0; }
+
+      /* Login */
+      #auth-screen { align-items: flex-start; overflow-y: auto; padding: 1rem !important; }
+      #auth-screen > div { margin: auto; padding: 1.5rem !important; }
+    }
+
+    /* ---- Any screen below desktop: horizontal-scroll wide tables instead of breaking layout ---- */
+    @media screen and (max-width: 1023.98px) {
+      #app-screen table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      #app-screen table th, #app-screen table td { min-width: 4.5rem; }
+      #app-screen .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+      #report-card-render { padding: 1rem !important; }
+    }
+
+    /* ---- Touch devices: comfortable tap targets, no iOS zoom-on-focus ---- */
+    @media screen and (pointer: coarse) {
+      #app-screen input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),
+      #app-screen select, #app-screen textarea, #auth-screen input:not([type=checkbox]),
+      [id$="-modal"] input:not([type=checkbox]):not([type=radio]):not([type=file]), [id$="-modal"] select, [id$="-modal"] textarea { font-size: 16px !important; }
+      #app-screen input[type=checkbox], #app-screen input[type=radio] { width: 1.15rem; height: 1.15rem; }
+      #app-sidebar .nav-btn { padding-top: .85rem; padding-bottom: .85rem; }
+    }
+
+    /* Very large monitors: keep content readable */
+    @media screen and (min-width: 1920px) { #app-screen > main { padding: 2.5rem 3.5rem !important; } }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col selection:bg-brand-500 selection:text-white">
@@ -612,9 +724,18 @@
 
   <!-- ================= SECTION: MAIN APP LAYOUT & SIDEBAR ================= -->
   <div id="app-screen" class="hidden flex-1 flex flex-col md:flex-row">
+
+    <!-- Mobile / tablet top bar with menu button (hidden on desktop) -->
+    <div id="telos-mobilebar" class="no-print">
+      <button type="button" onclick="toggleTelosDrawer()" aria-label="Open menu" aria-controls="app-sidebar">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <div class="tmb-title"><div class="tmb-brand">TELOS</div><div class="tmb-page" id="telos-mobilebar-page">Dashboard</div></div>
+    </div>
+    <div id="telos-drawer-overlay" class="no-print" onclick="closeTelosDrawer()"></div>
     
     <!-- Sidebar Navigation -->
-    <aside class="w-full md:w-64 bg-brand-900 text-white flex flex-col no-print">
+    <aside id="app-sidebar" class="w-full md:w-64 bg-brand-900 text-white flex flex-col no-print">
       <div class="p-6 border-b border-brand-700/50 flex items-center justify-between">
         <div class="flex items-center space-x-3">
           <div class="w-10 h-10 rounded-xl overflow-hidden"><img src="data:image/png;base64,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" alt="TELOS Logo" class="w-full h-full object-cover rounded-xl"></div>
@@ -1650,6 +1771,7 @@
                 <h3 class="text-lg font-bold text-brand-900">Promote Students</h3>
                 <p class="text-[11px] text-slate-500 max-w-2xl">Set the class your students are being promoted to, load your students, then promote the ones you choose (or everyone at once). &ldquo;Promoted To&rdquo; and that class are then printed on each promoted student's report card. This only marks the report card &mdash; it does not move the student out of your class.</p>
               </div>
+              <p id="ct-promo-locked-note" class="hidden text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3" role="status">Promotion is locked. It can only be used once the Administrator enables Position/Ranking for the current term (Settings &gt; Academic Setup &gt; Terms Setup).</p>
               <div id="ct-promo-class-row" class="hidden max-w-xs">
                 <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Your Class</label>
                 <select id="ct-promo-class-select" onchange="changeCtPromoClass(this.value)" class="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm font-semibold"></select>
@@ -4118,6 +4240,8 @@
         if (el.id === 'ct-promotion-card') return; // Class Teacher only — shown/hidden by renderPromotionCard()
         el.classList.toggle('hidden', !isAdminUser);
       });
+      // Keep the Class Teacher promotion card's locked/unlocked state in step with the current term's ranking setting.
+      try { renderPromotionCard(); } catch (e) { /* settings not on screen yet */ }
       const navSettingsLabel = document.getElementById('nav-settings-label');
       if (navSettingsLabel) navSettingsLabel.textContent = isAdminUser ? 'Admin Settings' : 'Academic Setup';
       if (!isAdminUser) switchSettingsSubTab('academic');
@@ -4391,6 +4515,27 @@
         }
       }
     }
+
+    // ---- Responsive drawer (phones & tablets) ----
+    function openTelosDrawer(){ document.body.classList.add('telos-drawer-open'); }
+    function closeTelosDrawer(){ document.body.classList.remove('telos-drawer-open'); }
+    function toggleTelosDrawer(){ document.body.classList.toggle('telos-drawer-open'); }
+    (function(){
+      function syncBarTitle(){
+        var t=document.getElementById('page-title'), b=document.getElementById('telos-mobilebar-page');
+        if(t&&b) b.textContent=t.textContent;
+      }
+      document.addEventListener('DOMContentLoaded', function(){
+        var side=document.getElementById('app-sidebar');
+        if(side) side.addEventListener('click', function(e){ if(e.target.closest('.nav-btn')||e.target.closest('[onclick*="handleLogout"]')) closeTelosDrawer(); });
+        var t=document.getElementById('page-title');
+        if(t) new MutationObserver(syncBarTitle).observe(t,{childList:true,characterData:true,subtree:true});
+        syncBarTitle();
+      });
+      document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeTelosDrawer(); });
+      window.addEventListener('resize', function(){ if(window.innerWidth>=1024) closeTelosDrawer(); });
+      window.addEventListener('scroll', function(){}, {passive:true});
+    })();
 
     function switchTab(tabId) {
       // Refuse to open a tab this role isn't allowed to see, even if triggered
@@ -5236,6 +5381,73 @@
       XLSX.writeFile(wb, `staff-directory-${new Date().toISOString().slice(0, 10)}.xlsx`);
     }
 
+    // Shared by every "build a table into a plain <div>, then export it as a PDF"
+    // download below (Staff/Student Directory, Duty Roster, Exam/Class Timetable).
+    //
+    // This deliberately mirrors captureReportCardsToSinglePagePDF() below, which is
+    // the one PDF export in this file that's proven reliable, rather than handing the
+    // container to html2pdf's own from()/save() chain:
+    //   1. html2canvas can only capture an element that is attached to the page AND
+    //      has real layout — an off-screen container with no explicit width has no
+    //      reliable box to measure, which is why these downloads were coming out
+    //      blank even after being appended to the page. So this gives the container
+    //      a fixed pixel width before measuring/capturing it.
+    //   2. It calls html2canvas directly (bundled globally by the standalone
+    //      html2canvas.min.js script tag) with windowWidth/windowHeight matched to
+    //      the container's own full size, instead of html2pdf's internal renderer,
+    //      which avoids the clipping/overlay problems noted near
+    //      captureReportCardsToSinglePagePDF().
+    //   3. It borrows a real jsPDF instance the same way that function does (jsPDF is
+    //      bundled inside html2pdf.bundle.min.js and isn't otherwise exposed on
+    //      window), then places the captured image on it itself.
+    async function exportSimpleTablePDF(container, opt) {
+      const orientation = (opt.jsPDF && opt.jsPDF.orientation) || 'landscape';
+      const format = (opt.jsPDF && opt.jsPDF.format) || 'a4';
+      const MARGIN = (typeof opt.margin === 'number') ? opt.margin : 10; // mm
+      const pageW = orientation === 'landscape' ? 297 : 210;
+      const pageH = orientation === 'landscape' ? 210 : 297;
+      const maxW = pageW - MARGIN * 2;
+      const maxH = pageH - MARGIN * 2;
+
+      container.style.position = 'absolute';
+      container.style.left = '-10000px';
+      container.style.top = '0';
+      container.style.width = '1100px';   // explicit width so the table has a real box to lay out and capture
+      container.style.background = '#fff';
+      document.body.appendChild(container);
+
+      // Give the browser two animation frames to actually paint the container
+      // (matches the wait used before every other capture in this file) before
+      // measuring/capturing it.
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      try {
+        const seed = document.createElement('div');
+        seed.style.cssText = 'width:2px;height:2px;background:#fff';
+        const pdf = await html2pdf()
+          .set({ margin: 0, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format, orientation } })
+          .from(seed).toPdf().get('pdf');
+
+        const fullH = Math.ceil(Math.max(container.scrollHeight, container.offsetHeight)) + 40;
+        const fullW = Math.max(1100, window.innerWidth, Math.ceil(Math.max(container.scrollWidth, container.offsetWidth)));
+        const canvas = await html2canvas(container, {
+          scale: 2, useCORS: true, scrollX: 0, scrollY: 0, windowWidth: fullW, windowHeight: fullH
+        });
+
+        let w = maxW;
+        let h = maxW * canvas.height / canvas.width;
+        if (h > maxH) {                    // too tall: shrink until it fits the page height
+          h = maxH;
+          w = maxH * canvas.width / canvas.height;
+        }
+        const x = MARGIN + (maxW - w) / 2;
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', x, MARGIN, w, h);
+        pdf.save(opt.filename);
+      } finally {
+        document.body.removeChild(container);
+      }
+    }
+
     function downloadStaffDirectoryPDF() {
       const staff = getStaffForExport();
       const cell = 'border:1px solid #cbd5e1;padding:6px;';
@@ -5278,7 +5490,7 @@
         html2canvas: { scale: 2 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
       };
-      html2pdf().from(container).set(opt).save();
+      exportSimpleTablePDF(container, opt);
     }
 
     function confirmStaffExport(format) {
@@ -5484,7 +5696,7 @@
         html2canvas: { scale: 2 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
       };
-      html2pdf().from(container).set(opt).save();
+      exportSimpleTablePDF(container, opt);
     }
 
     function confirmStudentExport(format) {
@@ -6486,7 +6698,7 @@
         html2canvas: { scale: 2 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
       };
-      html2pdf().from(container).set(opt).save();
+      exportSimpleTablePDF(container, opt);
     }
 
     function confirmDutyExport(format) {
@@ -6556,7 +6768,7 @@
         html2canvas: { scale: 2 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
       };
-      html2pdf().from(container).set(opt).save();
+      exportSimpleTablePDF(container, opt);
     }
 
     function confirmExamExport(format) {
@@ -6632,7 +6844,7 @@
         html2canvas: { scale: 2 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
       };
-      html2pdf().from(container).set(opt).save();
+      exportSimpleTablePDF(container, opt);
     }
 
     function confirmClassExport(format) {
@@ -7173,7 +7385,7 @@
         // (rather than the real, on-screen browser window) removes the clipping that
         // would otherwise cut anything taller than the visible window off the bottom.
         const fullH = Math.ceil(Math.max(page.scrollHeight, page.offsetHeight)) + 40;
-        const fullW = Math.max(window.innerWidth, Math.ceil(Math.max(page.scrollWidth, page.offsetWidth)));
+        const fullW = Math.max(1100, window.innerWidth, Math.ceil(Math.max(page.scrollWidth, page.offsetWidth)));
         const canvas = await html2canvas(page, {
           ...capture.html2canvas, scrollX: 0, scrollY: 0, windowWidth: fullW, windowHeight: fullH
         });
@@ -7505,6 +7717,19 @@
     let ctPromoLoaded = false;    // whether the student list has been loaded
 
     function canUseCtPromotion() { return hasClassTeacherPrivileges() && getLedClassNames().length > 0; }
+    // Promotion is only usable while the Administrator has Position/Ranking switched on for the current
+    // term (Terms Setup). With ranking off the card stays visible but locked, and every action is refused.
+    function isCtPromotionUnlocked() {
+      return isRankingEnabledForTerm(systemSettings.term, systemSettings.academicYear);
+    }
+    function canEditCtPromotion() {
+      if (!canUseCtPromotion()) return false;
+      if (!isCtPromotionUnlocked()) {
+        showCtPromoMessage('Promotion is disabled. The Administrator must enable Position/Ranking for this term first.');
+        return false;
+      }
+      return true;
+    }
     function getCtPromoClass() {
       const led = getLedClassNames();
       if (!led.length) return null;
@@ -7531,6 +7756,17 @@
       card.classList.toggle('hidden', !show);
       if (!show) { ctPromoLoaded = false; return; }
 
+      const unlocked = isCtPromotionUnlocked();
+      const lockNote = document.getElementById('ct-promo-locked-note');
+      if (lockNote) lockNote.classList.toggle('hidden', unlocked);
+      if (!unlocked) {
+        ctPromoLoaded = false;
+        showCtPromoMessage('');
+      }
+      card.classList.toggle('opacity-60', !unlocked);
+      card.querySelectorAll('input, select, button').forEach(el => { el.disabled = !unlocked; });
+      card.querySelectorAll('button').forEach(el => el.classList.toggle('cursor-not-allowed', !unlocked));
+
       const led = getLedClassNames();
       const cls = getCtPromoClass();
       const pickRow = document.getElementById('ct-promo-class-row');
@@ -7545,12 +7781,12 @@
       const target = promotionTargets[cls] || '';
       const input = document.getElementById('ct-promo-target-input');
       if (document.activeElement !== input) input.value = target;
-      document.getElementById('ct-promo-actions').classList.toggle('hidden', !target);
+      document.getElementById('ct-promo-actions').classList.toggle('hidden', !target || !unlocked);
       document.getElementById('ct-promo-source').textContent = cls;
       document.getElementById('ct-promo-target-label').textContent = target;
 
-      document.getElementById('ct-promo-list-wrap').classList.toggle('hidden', !(target && ctPromoLoaded));
-      if (target && ctPromoLoaded) renderCtPromoList();
+      document.getElementById('ct-promo-list-wrap').classList.toggle('hidden', !(target && ctPromoLoaded && unlocked));
+      if (target && ctPromoLoaded && unlocked) renderCtPromoList();
     }
 
     function changeCtPromoClass(name) {
@@ -7563,7 +7799,7 @@
     }
 
     function saveCtPromotionTarget() {
-      if (!canUseCtPromotion()) return;
+      if (!canEditCtPromotion()) return;
       const cls = getCtPromoClass();
       const text = document.getElementById('ct-promo-target-input').value.trim().replace(/\s+/g, ' ');
       if (!text) { showCtPromoMessage('Enter the class your students will be promoted to.'); return; }
@@ -7575,7 +7811,8 @@
     }
 
     function loadCtPromoStudents() {
-      if (!canUseCtPromotion() || !promotionTargets[getCtPromoClass()]) { showCtPromoMessage('Set the class to promote to first.'); return; }
+      if (!canEditCtPromotion()) return;
+      if (!promotionTargets[getCtPromoClass()]) { showCtPromoMessage('Set the class to promote to first.'); return; }
       ctPromoLoaded = true;
       showCtPromoMessage('');
       renderPromotionCard();
@@ -7619,7 +7856,7 @@
     }
 
     function applyCtPromotion(ids) {
-      if (!canUseCtPromotion()) return;
+      if (!canEditCtPromotion()) return;
       const cls = getCtPromoClass();
       const target = promotionTargets[cls];
       if (!target) { showCtPromoMessage('Set the class to promote to first.'); return; }
@@ -7634,13 +7871,14 @@
     }
 
     function promoteCtSelected() {
+      if (!canEditCtPromotion()) return;
       const ids = getCheckedCtPromoIds();
       if (!ids.length) { alert('Please select at least one student to promote.'); return; }
       applyCtPromotion(ids);
     }
 
     function promoteCtAll() {
-      if (!canUseCtPromotion()) return;
+      if (!canEditCtPromotion()) return;
       const target = promotionTargets[getCtPromoClass()];
       const students = ctPromoStudents();
       if (!target) { showCtPromoMessage('Set the class to promote to first.'); return; }
@@ -7650,7 +7888,7 @@
     }
 
     function removeCtPromotion() {
-      if (!canUseCtPromotion()) return;
+      if (!canEditCtPromotion()) return;
       const ids = getCheckedCtPromoIds();
       if (!ids.length) { alert('Please select at least one student.'); return; }
       const mine = new Set(ctPromoStudents().map(s => s.id));
@@ -8087,7 +8325,7 @@
           }));
 
           const fullH = Math.ceil(Math.max(clone.scrollHeight, clone.offsetHeight)) + 40;
-          const fullW = Math.max(window.innerWidth, Math.ceil(Math.max(clone.scrollWidth, clone.offsetWidth)));
+          const fullW = Math.max(1100, window.innerWidth, Math.ceil(Math.max(clone.scrollWidth, clone.offsetWidth)));
           // Call html2canvas directly rather than routing through another html2pdf()
           // worker for this capture - see the matching note in
           // captureReportCardsToSinglePagePDF() for why that avoids leftover overlay
@@ -8611,6 +8849,7 @@
       if (!t || t.locked) { renderTermsTable(); return; }
       t.rankingEnabled = checked;
       refreshAllData(); // re-renders and persists
+      renderPromotionCard(); // Class Teacher promotion locks/unlocks with this setting
       try { renderReportCard(); } catch (e) { /* report card not on screen */ }
     }
 
