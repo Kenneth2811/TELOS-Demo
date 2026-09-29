@@ -194,6 +194,39 @@
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col selection:bg-brand-500 selection:text-white">
 
+  <!-- Session-restore splash: shown instead of the login form while a saved sign-in is being
+       restored after a refresh, so people never see the login screen flash by. -->
+  <style>
+    #telos-restoring { display: none; }
+    html.telos-restoring #telos-restoring { display: flex; position: fixed; inset: 0; z-index: 60; align-items: center; justify-content: center; flex-direction: column; gap: 14px; background: #1e1b4b; color: #e0e7ff; font: 600 14px system-ui, sans-serif; }
+    html.telos-restoring #auth-screen { visibility: hidden; }
+    #telos-restoring .telos-spin { width: 34px; height: 34px; border: 3px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: telos-spin .8s linear infinite; }
+    @keyframes telos-spin { to { transform: rotate(360deg); } }
+    /* Sign-in button loading state */
+    #login-submit-btn .telos-btn-spin { display: none; width: 18px; height: 18px; border: 2.5px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: telos-spin .7s linear infinite; }
+    #login-submit-btn.is-loading { display: flex; align-items: center; justify-content: center; gap: 10px; opacity: .85; cursor: wait; }
+    #login-submit-btn.is-loading .telos-btn-spin { display: inline-block; }
+    #login-form.is-busy input { opacity: .7; cursor: wait; }
+  </style>
+  <div id="telos-restoring"><div class="telos-spin"></div><div>Restoring your session&hellip;</div></div>
+  <script>
+    // Runs immediately: if this browser holds a saved sign-in (a Supabase session token, or the
+    // local-testing session), show the splash instead of the login form until DOMContentLoaded
+    // finishes restoring it. If restoring fails, the splash is removed and the login form appears.
+    (function () {
+      try {
+        var has = false, stores = [window.localStorage, window.sessionStorage];
+        for (var i = 0; i < stores.length && !has; i++) {
+          for (var j = 0; j < stores[i].length; j++) {
+            var k = stores[i].key(j) || '';
+            if (k === 'telos_session' || (k.indexOf('sb-') === 0 && k.slice(-11) === '-auth-token')) { has = true; break; }
+          }
+        }
+        if (has) document.documentElement.classList.add('telos-restoring');
+      } catch (e) {}
+    })();
+  </script>
+
   <!-- ================= SECTION: AUTHENTICATION SCREEN ================= -->
   <div id="auth-screen" class="fixed inset-0 z-50 bg-brand-900 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full space-y-6">
@@ -233,9 +266,11 @@
           <p class="text-[11px] text-slate-400 mt-1 ml-6 leading-snug">Stays signed in on this device even after you close the browser. Don't use this on a shared computer.</p>
         </div>
         <p id="login-error" class="hidden text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2"></p>
-        <button type="submit" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 rounded-lg shadow-md shadow-brand-600/20 transition-all">
-          Sign In
+        <button type="submit" id="login-submit-btn" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 rounded-lg shadow-md shadow-brand-600/20 transition-all disabled:cursor-wait">
+          <span class="telos-btn-spin" aria-hidden="true"></span>
+          <span id="login-submit-label">Sign In</span>
         </button>
+        <p id="login-status" class="hidden text-xs font-semibold text-brand-600 text-center" role="status" aria-live="polite"></p>
         <p id="login-hint" class="text-[11px] text-slate-400 text-center leading-relaxed">Enjoy Our Product</p>
       </form>
     </div>
@@ -3894,15 +3929,34 @@
 
     // Looks for an existing Supabase session on page load (so a refresh
     // doesn't force a re-login) without touching any app data yet.
+    // The last account resolved for a valid session, kept only so a refresh while offline or during a
+    // brief database hiccup doesn't sign the person out. It is used ONLY when the profile lookup
+    // itself errors (never when the profile is missing/inactive), and every real permission is still
+    // enforced by Supabase Row Level Security on the server. Wiped on logout.
+    const LAST_ACCOUNT_KEY = 'telos_last_account';
     async function getSupabaseSessionAccount() {
       try {
         const { data } = await supabaseClient.auth.getSession();
         const user = data && data.session && data.session.user;
         if (!user) return null;
-        const profile = await fetchProfile(user.id);
+        let profile = await fetchProfile(user.id);
+        // A failed lookup (flaky connection) gets two quick retries before giving up.
+        for (let i = 0; i < 2 && !profile && lastProfileError; i++) {
+          await new Promise(r => setTimeout(r, 700));
+          profile = await fetchProfile(user.id);
+        }
         const account = accountFromProfile(profile);
-        if (!account) return null;
-        return { account, email: user.email };
+        if (account) {
+          try { (shouldKeepSignedIn() ? localStorage : sessionStorage).setItem(LAST_ACCOUNT_KEY, JSON.stringify({ uid: user.id, account })); } catch (e) {}
+          return { account, email: user.email };
+        }
+        if (lastProfileError) {
+          try {
+            const cached = JSON.parse(sessionStorage.getItem(LAST_ACCOUNT_KEY) || localStorage.getItem(LAST_ACCOUNT_KEY));
+            if (cached && cached.uid === user.id && cached.account) return { account: cached.account, email: user.email };
+          } catch (e) {}
+        }
+        return null;
       } catch (e) {
         console.warn('Could not restore the Supabase session:', e);
         return null;
@@ -4310,8 +4364,47 @@
       }
     }
 
+    // ================= REMEMBER WHERE THE USER WAS (survives a page refresh) =================
+    // Only the screen/tab names are stored (never any school data), in sessionStorage: it survives
+    // a refresh but ends when the tab is closed. It is tied to the signed-in email, so it is never
+    // applied to a different person, and it is wiped on logout and on every fresh login.
+    const NAV_STATE_KEY = 'telos_nav_state';
+    function readNavState() {
+      try { return JSON.parse(sessionStorage.getItem(NAV_STATE_KEY)) || null; } catch (e) { return null; }
+    }
+    function clearNavState() {
+      try { sessionStorage.removeItem(NAV_STATE_KEY); } catch (e) {}
+    }
+    function saveNavState(patch) {
+      if (!currentRole || !currentUser) return;
+      try {
+        let st = readNavState();
+        if (!st || String(st.user || '').toLowerCase() !== String(currentUser).toLowerCase()) st = { user: currentUser };
+        sessionStorage.setItem(NAV_STATE_KEY, JSON.stringify(Object.assign(st, patch)));
+      } catch (e) {}
+    }
+    // After a refresh: put the person back on the tab they were on (data was already re-loaded
+    // fresh from Supabase by loadAllState()). Returns true if it restored the main app screen.
+    function restoreNavState(email) {
+      const st = readNavState();
+      if (!st || String(st.user || '').toLowerCase() !== String(email || '').toLowerCase()) return false;
+      if (st.screen !== 'app') return false; // they were still on the welcome page: stay there
+      document.getElementById('landing-screen').classList.add('hidden');
+      document.getElementById('app-screen').classList.remove('hidden');
+      applyRolePermissions();
+      const allowed = getAllowedTabs();
+      const tab = allowed.includes(st.tab) ? st.tab : allowed[0];
+      if (tab) switchTab(tab);
+      if (tab === 'settings' && st.settingsSub) { try { switchSettingsSubTab(st.settingsSub); } catch (e) {} }
+      refreshAllData();
+      updateHeaderSchoolName();
+      startLiveClock();
+      return true;
+    }
+
     // --- Initialization ---
     window.addEventListener('DOMContentLoaded', async () => {
+     try {
       // Guarded like every other lucide.createIcons() call in this file: if the
       // icon CDN is blocked/slow/offline, icons just don't render instead of
       // throwing and aborting everything after this line (which used to
@@ -4343,7 +4436,10 @@
           // Session was valid but the account's link is broken (e.g. the
           // linked staff/student record was since removed) — don't leave
           // someone signed in with no usable role.
+          clearNavState();
           await supabaseClient.auth.signOut();
+        } else {
+          restoreNavState(sessionEmail);
         }
       } else if (!isSupabaseConfigured()) {
         // Local-testing mode: restore a saved "keep me signed in" session, if any.
@@ -4351,9 +4447,14 @@
         if (saved) {
           const account = resolveAccountForSession(saved.email);
           const outcome = account ? applyLoggedInAccount(account, saved.email) : { success: false };
-          if (!outcome.success) clearLocalSession();
+          if (!outcome.success) { clearLocalSession(); clearNavState(); }
+          else restoreNavState(saved.email);
         }
       }
+     } finally {
+      // Always lift the splash — on success the app is showing, on failure the login form is.
+      document.documentElement.classList.remove('telos-restoring');
+     }
     });
 
     // --- Show/hide password (eye icon) ---
@@ -4486,8 +4587,10 @@
       const errorEl = document.getElementById('login-error');
       const keepSignedIn = !!document.getElementById('login-keep-signed-in')?.checked;
       errorEl.classList.add('hidden');
-      const submitBtn = event.target.querySelector('button[type="submit"]');
-      if (submitBtn) submitBtn.disabled = true;
+      // Ignore repeat clicks / Enter presses while a sign-in is already in progress.
+      if (window._telosLoginBusy) return;
+      window._telosLoginBusy = true;
+      setLoginLoading(true, 'Signing in…');
 
       try {
         let account;
@@ -4507,6 +4610,7 @@
             return;
           }
           account = result.account;
+          setLoginLoading(true, 'Loading your data…');
           // Re-hydrate app data now that we're authenticated, so RLS-gated
           // collections come through instead of whatever the anonymous
           // pre-login load was able to see (often nothing, by design).
@@ -4522,6 +4626,7 @@
           }
         }
 
+        clearNavState(); // a fresh sign-in always starts at the welcome page, never a stale tab
         const outcome = applyLoggedInAccount(account, email);
         if (!outcome.success) {
           errorEl.textContent = outcome.message;
@@ -4531,7 +4636,26 @@
           saveLocalSession(email, keepSignedIn);
         }
       } finally {
-        if (submitBtn) submitBtn.disabled = false;
+        window._telosLoginBusy = false;
+        setLoginLoading(false);
+      }
+    }
+
+    // Shows / hides the "please wait" state on the sign-in form so people don't click Sign In repeatedly.
+    function setLoginLoading(on, message) {
+      const btn = document.getElementById('login-submit-btn');
+      const label = document.getElementById('login-submit-label');
+      const status = document.getElementById('login-status');
+      const form = document.getElementById('login-form');
+      if (btn) { btn.disabled = !!on; btn.classList.toggle('is-loading', !!on); btn.setAttribute('aria-busy', on ? 'true' : 'false'); }
+      if (label) label.textContent = on ? (message || 'Signing in…') : 'Sign In';
+      if (status) {
+        if (on) { status.textContent = 'Please wait, do not close or refresh this page.'; status.classList.remove('hidden'); }
+        else status.classList.add('hidden');
+      }
+      if (form) {
+        form.classList.toggle('is-busy', !!on);
+        form.querySelectorAll('input').forEach(i => { i.readOnly = !!on; });
       }
     }
 
@@ -4541,6 +4665,7 @@
       applyRolePermissions();
       const firstAllowed = getAllowedTabs()[0];
       if (firstAllowed) switchTab(firstAllowed);
+      saveNavState({ screen: 'app', tab: firstAllowed });
       refreshAllData();
       updateHeaderSchoolName();
       startLiveClock();
@@ -4558,6 +4683,8 @@
       document.getElementById('login-error').classList.add('hidden');
       resetPasswordVisibility('login-password');
       clearLocalSession();
+      clearNavState();
+      try { localStorage.removeItem(LAST_ACCOUNT_KEY); sessionStorage.removeItem(LAST_ACCOUNT_KEY); } catch (e) {}
       if (isSupabaseConfigured()) {
         supabaseClient.auth.signOut().catch(() => {});
         // Only when nothing is waiting to sync: wipe the local mirror of student/staff data.
@@ -4617,6 +4744,8 @@
         settings: currentRole === 'Admin' ? 'Administrator Settings' : 'Academic Setup'
       };
       document.getElementById('page-title').textContent = titles[tabId] || 'Dashboard';
+      // Remember the open tab so a page refresh returns here (only once inside the main app).
+      if (!document.getElementById('app-screen').classList.contains('hidden')) saveNavState({ screen: 'app', tab: tabId });
       applyRolePermissions();
       refreshAllData();
       if (tabId === 'timetable') {
@@ -8600,6 +8729,7 @@
       });
       document.getElementById(`settings-sub-${sub}`).classList.remove('hidden');
       document.getElementById(`set-sub-btn-${sub}`).className = 'py-2.5 px-4 rounded-lg text-xs font-bold bg-brand-600 text-white transition-all text-center cursor-pointer';
+      saveNavState({ settingsSub: sub });
 
       if (sub === 'promotion') {
         populatePromotionDropdowns();
