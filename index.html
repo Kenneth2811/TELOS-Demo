@@ -874,6 +874,9 @@
               </select>
             </div>
             <div class="flex gap-3">
+              <button id="btn-sort-students" onclick="toggleStudentSort()" title="Sort names A–Z by last name, then first name, with Male listed before Female" class="hidden bg-white border border-slate-200 text-slate-700 font-bold px-4 py-2 rounded-lg hover:bg-slate-100 items-center gap-2 text-sm cursor-pointer">
+                <i data-lucide="arrow-down-a-z" class="w-4 h-4"></i> <span id="btn-sort-students-label">Sort A–Z</span>
+              </button>
               <button id="btn-bulk-students" onclick="openBulkImportModal('student')" class="manage-only bg-white border border-slate-200 text-slate-700 font-bold px-4 py-2 rounded-lg hover:bg-slate-100 flex items-center gap-2 text-sm cursor-pointer">
                 <i data-lucide="upload" class="w-4 h-4"></i> Bulk Add (Excel)
               </button>
@@ -4176,9 +4179,59 @@
       }
       if (currentRole === 'Class Teacher' || currentRole === 'Subject Teacher') {
         const classes = getVisibleClassNames();
-        return studentList.filter(s => classes.includes(s.class));
+        return sortStudentsForRole(studentList.filter(s => classes.includes(s.class)));
       }
-      return currentRole === 'Admin' ? studentList : [];
+      return currentRole === 'Admin' ? sortStudentsForRole(studentList) : [];
+    }
+
+    // ---- Student name sort (Admin / Class Teacher / Subject Teacher) ----
+    // A per-role display preference kept in this browser only (localStorage). It never edits
+    // studentList and never touches Supabase: sorting always works on a COPY of the array.
+    // When ON: Male first, then Female (anyone else last); inside each group A–Z by last name,
+    // then first name, then other names.
+    const STUDENT_SORT_KEY = 'telos_student_sort_prefs';
+    const STUDENT_SORT_ROLES = ['Admin', 'Class Teacher', 'Subject Teacher'];
+    function studentSortEnabled() {
+      if (!STUDENT_SORT_ROLES.includes(currentRole)) return false;
+      try { return !!(JSON.parse(localStorage.getItem(STUDENT_SORT_KEY)) || {})[currentRole]; } catch (e) { return false; }
+    }
+    function compareStudentsAZ(a, b) {
+      const rank = g => { const v = String(g || '').trim().toLowerCase(); return v === 'male' ? 0 : v === 'female' ? 1 : 2; };
+      const gr = rank(a.gender) - rank(b.gender);
+      if (gr) return gr;
+      const pa = getStudentNameParts(a), pb = getStudentNameParts(b);
+      const cmp = (x, y) => String(x || '').trim().localeCompare(String(y || '').trim(), undefined, { sensitivity: 'base', numeric: true });
+      // A student with only one name is sorted by that name in the "last name" position.
+      return cmp(pa.lastName || pa.firstName, pb.lastName || pb.firstName)
+        || cmp(pa.firstName, pb.firstName)
+        || cmp(pa.otherNames, pb.otherNames);
+    }
+    function sortStudentsForRole(list) {
+      return studentSortEnabled() ? [...list].sort(compareStudentsAZ) : list;
+    }
+    function updateStudentSortButton() {
+      const btn = document.getElementById('btn-sort-students');
+      if (!btn) return;
+      const allowed = STUDENT_SORT_ROLES.includes(currentRole);
+      btn.classList.toggle('hidden', !allowed);
+      btn.classList.toggle('flex', allowed);
+      const on = studentSortEnabled();
+      btn.classList.toggle('bg-brand-600', on);
+      btn.classList.toggle('text-white', on);
+      btn.classList.toggle('border-brand-600', on);
+      btn.classList.toggle('bg-white', !on);
+      btn.classList.toggle('text-slate-700', !on);
+      const label = document.getElementById('btn-sort-students-label');
+      if (label) label.textContent = on ? 'Sorted A–Z (On)' : 'Sort A–Z';
+    }
+    function toggleStudentSort() {
+      if (!STUDENT_SORT_ROLES.includes(currentRole)) return;
+      let prefs = {};
+      try { prefs = JSON.parse(localStorage.getItem(STUDENT_SORT_KEY)) || {}; } catch (e) {}
+      prefs[currentRole] = !prefs[currentRole];
+      try { localStorage.setItem(STUDENT_SORT_KEY, JSON.stringify(prefs)); } catch (e) {}
+      refreshAllData();
+      if (window.lucide) lucide.createIcons();
     }
 
     // Header badge: shows "Class & Subject Teacher" when the signed-in teacher is both.
@@ -5532,6 +5585,7 @@
 
     function renderStudentList() {
       populateStudentClassFilter();
+      updateStudentSortButton();
       const q = (document.getElementById('student-search').value || '').toLowerCase();
       const classFilter = document.getElementById('student-class-filter').value;
       const statusFilter = document.getElementById('student-status-filter').value;
@@ -7746,7 +7800,7 @@
     }
     function ctPromoStudents() {
       const cls = getCtPromoClass();
-      return cls ? studentList.filter(s => s.class === cls) : [];
+      return cls ? sortStudentsForRole(studentList.filter(s => s.class === cls)) : [];
     }
 
     function renderPromotionCard() {
@@ -10266,7 +10320,7 @@
       const term = getPromotionSourceTerm(year);
       renderPromotionGateBanner(year, term);
 
-      const filtered = studentList.filter(s => s.class === className);
+      const filtered = sortStudentsForRole(studentList.filter(s => s.class === className));
       if (filtered.length === 0) {
         tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400">No students found in this class.</td></tr>`;
         document.getElementById('promotion-student-selection-container').classList.add('hidden');
