@@ -33,6 +33,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <!-- SheetJS for Excel (.xlsx) bulk-upload template generation & parsing -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- JSZip: only used to add the Class dropdown into the generated student template (.xlsx). If it fails to load, the template still downloads (with a Classes sheet) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   
   <script>
     tailwind.config = {
@@ -3678,7 +3680,22 @@
     // Small badge in the sidebar (next to the role badge) so it's always
     // visible whether the app is fully synced, mid-sync, offline with
     // queued changes, or just running in local-testing mode.
+    // Dashboard > System Status card. Reflects the browser's real connectivity
+    // (navigator.onLine + online/offline events) instead of a hardcoded label.
+    // Read-only UI: it never touches the Supabase client or its config.
+    function updateConnectionStatusUI() {
+      const wrap = document.getElementById('connection-status-indicator');
+      const dot = document.getElementById('connection-dot');
+      const txt = document.getElementById('connection-text');
+      if (!wrap || !dot || !txt) return;
+      const online = isOnline();
+      wrap.className = 'text-sm font-bold flex items-center gap-1 ' + (online ? 'text-emerald-600' : 'text-red-600');
+      dot.className = 'w-2 h-2 rounded-full ' + (online ? 'bg-emerald-500' : 'bg-red-500');
+      txt.textContent = online ? 'Online Connected' : 'Offline';
+    }
+
     function updateSyncStatusUI(forceState) {
+      updateConnectionStatusUI();
       const el = document.getElementById('sync-status');
       if (!el) return;
       const pending = pendingSyncCount();
@@ -3703,8 +3720,12 @@
     // and the interval is a safety net for cases it can miss (e.g. Wi-Fi
     // reports "connected" before there's an actual route to Supabase).
     function initConnectivityWatchers() {
-      window.addEventListener('online', flushSyncQueue);
-      window.addEventListener('offline', () => updateSyncStatusUI('offline'));
+      window.addEventListener('online', () => { updateConnectionStatusUI(); flushSyncQueue(); });
+      window.addEventListener('offline', () => { updateConnectionStatusUI(); updateSyncStatusUI('offline'); });
+      // Re-check when the tab becomes visible again and on a light timer, since some
+      // browsers/devices don't reliably fire online/offline events.
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) updateConnectionStatusUI(); });
+      setInterval(updateConnectionStatusUI, 5000);
       setInterval(flushSyncQueue, 20000);
       updateSyncStatusUI();
     }
@@ -5227,9 +5248,9 @@
       student: {
         label: 'Students',
         file: 'student-bulk-template.xlsx',
-        headers: ['First Name', 'Last Name', 'Other Names', 'Date of Birth', 'Gender', 'Admission Date', 'Parent/Guardian Name', 'Parent/Guardian Relation'],
-        example: ['#EXAMPLE - delete this row', 'Mensah', 'Kwame', '2015-04-23', 'Male', '2026-09-08', 'Ama Mensah', 'Mother'],
-        desc: 'Required: First Name, Last Name, Date of Birth (YYYY-MM-DD or DD/MM/YYYY) and Gender (Male/Female). Everything else is optional and can be completed later. Student IDs are generated automatically; Class can be set from each student\'s record afterward.',
+        headers: ['First Name', 'Last Name', 'Other Names', 'Date of Birth', 'Gender', 'Class', 'Admission Date', 'Parent/Guardian Name', 'Parent/Guardian Relation'],
+        example: ['#EXAMPLE - delete this row', 'Mensah', 'Kwame', '2015-04-23', 'Male', '', '2026-09-08', 'Ama Mensah', 'Mother'],
+        desc: 'Required: First Name, Last Name, Date of Birth (YYYY-MM-DD or DD/MM/YYYY) and Gender (Male/Female). Class is optional: pick it from the dropdown in the Class column (it lists the classes already set up in the system; download a fresh template if you add new classes). Everything else is optional and can be completed later. Student IDs are generated automatically.',
         aliases: {
           firstname: 'firstName', lastname: 'lastName', surname: 'lastName', othernames: 'otherNames', middlename: 'otherNames',
           dateofbirth: 'dob', dob: 'dob', gender: 'gender', sex: 'gender', class: 'class', classgrade: 'class', grade: 'class',
@@ -5286,11 +5307,80 @@
     function downloadBulkTemplate() {
       if (!canManageRecords() || !bulkKind) return;
       const cfg = BULK_CONFIG[bulkKind];
+      const wb = XLSX.utils.book_new();
+
+      // Student template only: the Class column is a dropdown fed by the classes currently saved in the system.
+      // (Read-only use of classesStreams - nothing is written to the app data or to Supabase here.)
+      const classCol = bulkKind === 'student' ? cfg.headers.indexOf('Class') : -1;
+      const classNames = classCol >= 0
+        ? Array.from(new Set(classesStreams.map(c => String((c && c.name) || '')).filter(n => n.trim() !== '')))
+        : [];
+
       const ws = XLSX.utils.aoa_to_sheet([cfg.headers, cfg.example]);
       ws['!cols'] = cfg.headers.map(h => ({ wch: Math.max(14, h.length + 2) }));
-      const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Template');
-      XLSX.writeFile(wb, cfg.file);
+
+      if (!classNames.length) { XLSX.writeFile(wb, cfg.file); return; }
+
+      // Second sheet holds the class list the dropdown points at. The upload only ever reads the first sheet.
+      const wsClasses = XLSX.utils.aoa_to_sheet([['Classes (list used by the Class dropdown - do not edit)'], ...classNames.map(n => [n])]);
+      wsClasses['!cols'] = [{ wch: 44 }];
+      XLSX.utils.book_append_sheet(wb, wsClasses, 'Classes');
+
+      const colLetter = XLSX.utils.encode_col(classCol);
+      const dv = {
+        sqref: `${colLetter}2:${colLetter}2000`,
+        formula: `Classes!$A$2:$A$${classNames.length + 1}`
+      };
+      const fallback = () => { try { XLSX.writeFile(wb, cfg.file); } catch (e) { alert('Could not create the template file. Please try again.'); } };
+      try {
+        if (typeof JSZip === 'undefined') throw new Error('JSZip not loaded');
+        const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        addListValidationToSheet(data, 'Template', dv)
+          .then(blob => saveBulkBlob(blob, cfg.file))
+          .catch(fallback);
+      } catch (err) { fallback(); }
+    }
+
+    // Adds a list (dropdown) data-validation to a sheet of an already generated .xlsx.
+    // SheetJS (community build) cannot write dropdowns itself, so the sheet XML is patched inside the zip.
+    async function addListValidationToSheet(xlsxData, sheetName, dv) {
+      const zip = await JSZip.loadAsync(xlsxData);
+      let sheetPath = 'xl/worksheets/sheet1.xml';
+      try {
+        const wbXml = await zip.file('xl/workbook.xml').async('string');
+        const relsXml = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+        const sm = new RegExp('<sheet\\s[^>]*name="' + sheetName + '"[^>]*>').exec(wbXml);
+        const rid = sm && /r:id="([^"]+)"/.exec(sm[0]);
+        if (rid) {
+          const rm = new RegExp('<Relationship\\s[^>]*Id="' + rid[1] + '"[^>]*>').exec(relsXml);
+          const tg = rm && /Target="([^"]+)"/.exec(rm[0]);
+          if (tg) { const t = tg[1].replace(/^\//, ''); sheetPath = t.startsWith('xl/') ? t : 'xl/' + t; }
+        }
+      } catch (e) { /* keep default sheet1.xml */ }
+      const sheetFile = zip.file(sheetPath);
+      if (!sheetFile) throw new Error('Template sheet not found in file');
+      let xml = await sheetFile.async('string');
+      if (xml.indexOf('<dataValidations') !== -1) throw new Error('Sheet already has validations');
+      const dvXml = '<dataValidations count="1"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1"'
+        + ' errorTitle="Invalid class" error="Please choose a class from the dropdown list."'
+        + ' promptTitle="Class" prompt="Choose the class from the dropdown list."'
+        + ' sqref="' + dv.sqref + '"><formula1>' + dv.formula + '</formula1></dataValidation></dataValidations>';
+      // dataValidations must sit before these elements in the worksheet schema order.
+      const after = /<(hyperlinks|printOptions|pageMargins|pageSetup|headerFooter|rowBreaks|colBreaks|customProperties|cellWatches|ignoredErrors|smartTags|drawing|legacyDrawing|legacyDrawingHF|picture|oleObjects|controls|webPublishItems|tableParts|extLst)[\s\/>]/.exec(xml);
+      const at = after ? after.index : xml.lastIndexOf('</worksheet>');
+      if (at < 0) throw new Error('Unexpected sheet XML');
+      xml = xml.slice(0, at) + dvXml + xml.slice(at);
+      zip.file(sheetPath, xml);
+      return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', compression: 'DEFLATE' });
+    }
+
+    function saveBulkBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
     }
 
     // Small RFC-4180 style CSV parser (quotes, escaped quotes, CRLF, BOM, comma or semicolon separator).
