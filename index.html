@@ -1708,9 +1708,13 @@
                   <h4 class="font-bold text-sm text-brand-900">Classes & Streams Management</h4>
                   <p class="text-[11px] text-slate-500">Supports grade levels with flexible streams (e.g., JHS 1A, JHS 1B, Science, Arts, or empty stream).</p>
                 </div>
-                <button onclick="openClassStreamModal()" class="bg-brand-600 text-white font-bold px-3 py-1.5 rounded-lg text-xs hover:bg-brand-700 cursor-pointer">+ Add Class / Stream</button>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <button type="button" id="btn-toggle-classes-list" onclick="toggleConfigList('classes')" class="bg-white text-slate-700 border border-slate-300 font-bold px-3 py-1.5 rounded-lg text-xs hover:bg-slate-100 cursor-pointer">Hide List</button>
+                  <button onclick="openClassStreamModal()" class="bg-brand-600 text-white font-bold px-3 py-1.5 rounded-lg text-xs hover:bg-brand-700 cursor-pointer">+ Add Class / Stream</button>
+                </div>
               </div>
-              <div class="overflow-x-auto bg-white rounded-lg border">
+              <p id="classes-list-hidden-note" class="hidden text-[11px] text-slate-500 italic bg-white border rounded-lg p-3">The list of classes is hidden. Click "Show List" to view it.</p>
+              <div id="classes-list-wrap" class="overflow-x-auto bg-white rounded-lg border">
                 <table class="w-full text-left text-xs text-slate-600">
                   <thead class="bg-slate-100 font-bold text-slate-500 uppercase">
                     <tr>
@@ -1739,10 +1743,12 @@
                 </div>
                 <div class="flex items-center gap-2 flex-wrap">
                   <button onclick="openClassTeacherSubjectsModal()" class="bg-white text-brand-700 border border-brand-600 font-bold px-3 py-1.5 rounded-lg text-xs hover:bg-brand-50 cursor-pointer">Assign Subjects to Class Teacher</button>
+                  <button type="button" id="btn-toggle-subjects-list" onclick="toggleConfigList('subjects')" class="bg-white text-slate-700 border border-slate-300 font-bold px-3 py-1.5 rounded-lg text-xs hover:bg-slate-100 cursor-pointer">Hide List</button>
                   <button onclick="openSubjectModal()" class="bg-brand-600 text-white font-bold px-3 py-1.5 rounded-lg text-xs hover:bg-brand-700 cursor-pointer">+ Create Subject</button>
                 </div>
               </div>
-              <div class="overflow-x-auto bg-white rounded-lg border">
+              <p id="subjects-list-hidden-note" class="hidden text-[11px] text-slate-500 italic bg-white border rounded-lg p-3">The list of subjects and their teacher assignments is hidden. Click "Show List" to view it.</p>
+              <div id="subjects-list-wrap" class="overflow-x-auto bg-white rounded-lg border">
                 <table class="w-full text-left text-xs text-slate-600">
                   <thead class="bg-slate-100 font-bold text-slate-500 uppercase">
                     <tr>
@@ -9506,6 +9512,34 @@
       try { renderReportCard(); } catch (e) { /* report card not on screen */ }
     }
 
+    // ---- Hide / show the Classes list and the Subjects & teacher-assignment list (Settings > Academic Setup) ----
+    // Display-only preference kept in this browser (localStorage). It never edits classesStreams or
+    // subjects and never touches Supabase. Only the Administrator can see the toggles (Settings is
+    // Admin-only); anything else always sees the lists as before.
+    const CONFIG_LIST_HIDDEN_KEY = 'telos_config_list_hidden';
+    function getConfigListHidden() {
+      try { return JSON.parse(localStorage.getItem(CONFIG_LIST_HIDDEN_KEY)) || {}; } catch (e) { return {}; }
+    }
+    function applyConfigListVisibility() {
+      const prefs = getConfigListHidden();
+      ['classes', 'subjects'].forEach(key => {
+        const hidden = !!prefs[key];
+        const wrap = document.getElementById(key + '-list-wrap');
+        const note = document.getElementById(key + '-list-hidden-note');
+        const btn = document.getElementById('btn-toggle-' + key + '-list');
+        if (wrap) wrap.classList.toggle('hidden', hidden);
+        if (note) note.classList.toggle('hidden', !hidden);
+        if (btn) btn.textContent = hidden ? 'Show List' : 'Hide List';
+      });
+    }
+    function toggleConfigList(key) {
+      if (key !== 'classes' && key !== 'subjects') return;
+      const prefs = getConfigListHidden();
+      prefs[key] = !prefs[key];
+      try { localStorage.setItem(CONFIG_LIST_HIDDEN_KEY, JSON.stringify(prefs)); } catch (e) {}
+      applyConfigListVisibility();
+    }
+
     function renderClassesStreamsTable() {
       const tbody = document.getElementById('classes-streams-table-body');
       tbody.innerHTML = '';
@@ -9527,6 +9561,7 @@
         `;
         tbody.appendChild(tr);
       });
+      applyConfigListVisibility();
     }
 
     // Shows the teachers of a subject class-by-class, flagging where a teacher is also that
@@ -9565,6 +9600,7 @@
         `;
         tbody.appendChild(tr);
       });
+      applyConfigListVisibility();
     }
 
     function renderUsersManagementTable() {
