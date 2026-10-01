@@ -4987,10 +4987,10 @@
       const term = terms.find(t => t.status === 'Active' && !t.locked) || terms.find(t => !t.locked && t.name === systemSettings.term);
       let weeks = 0, termHtml = '<div class="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-2xl p-4">No open term is set. Add or activate a term under Settings > Academic Setup.</div>', daysLeft = null;
       if (term && term.start && term.end) {
-        const s0 = new Date(term.start), e0 = new Date(term.end), now = new Date();
-        daysLeft = Math.ceil((e0 - now) / 864e5); weeks = Math.max(1, Math.ceil((e0 - s0) / 6048e5));
-        const prog = Math.max(0, Math.min(100, Math.round((now - s0) / (e0 - s0) * 100)));
-        termHtml = `<div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row sm:items-center gap-3"><div class="text-sm font-bold text-slate-700 whitespace-nowrap">${esc(term.year)} — ${esc(term.name)}</div><div class="flex-1 h-2.5 bg-slate-100 rounded-full"><div class="h-2.5 rounded-full bg-brand-600" style="width:${prog}%"></div></div><div class="text-xs text-slate-500 whitespace-nowrap">${prog}% elapsed · ${daysLeft >= 0 ? daysLeft + ' days left' : 'ended ' + Math.abs(daysLeft) + ' days ago'}</div></div>`;
+        const s0 = new Date(term.start), e0 = new Date(term.end);
+        weeks = Math.max(1, Math.ceil((e0 - s0) / 6048e5));
+        { const n = new Date(); daysLeft = dayDiff(new Date(n.getFullYear(), n.getMonth(), n.getDate()), parseLocalDay(term.end)); } // term end, for the alerts below
+        termHtml = buildTermStripHtml(term) || termHtml;
       }
       document.getElementById('dash-term-strip').innerHTML = termHtml;
 
@@ -5253,10 +5253,8 @@
       let daysLeft = null;
       let termHtml = '<div class="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-2xl p-4">No open term is set. Please contact the Administrator.</div>';
       if (term && term.start && term.end) {
-        const s0 = new Date(term.start), e0 = new Date(term.end), now = new Date();
-        daysLeft = Math.ceil((e0 - now) / 864e5);
-        const prog = Math.max(0, Math.min(100, Math.round((now - s0) / (e0 - s0) * 100)));
-        termHtml = `<div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row sm:items-center gap-3"><div class="text-sm font-bold text-slate-700 whitespace-nowrap">${esc(term.year)} — ${esc(term.name)}</div><div class="flex-1 h-2.5 bg-slate-100 rounded-full"><div class="h-2.5 rounded-full bg-brand-600" style="width:${prog}%"></div></div><div class="text-xs text-slate-500 whitespace-nowrap">${prog}% elapsed · ${daysLeft >= 0 ? daysLeft + ' days left' : 'ended ' + Math.abs(daysLeft) + ' days ago'}</div></div>`;
+        { const n = new Date(); daysLeft = dayDiff(new Date(n.getFullYear(), n.getMonth(), n.getDate()), parseLocalDay(term.end)); } // term end, for the alerts below
+        termHtml = buildTermStripHtml(term) || termHtml;
       }
       document.getElementById('tdash-term-strip').innerHTML = termHtml;
 
@@ -9203,6 +9201,41 @@
     // Returns the single Academic Year currently marked Active in Academic
     // Setup & Structure (or undefined if none has been marked active yet,
     // e.g. on a brand-new install).
+    // ---- Academic-year progress (dashboard strip) ----
+    // Progress is measured against the ACTIVE ACADEMIC YEAR's Start/End dates (Settings > Academic
+    // Setup), using today's system date. All maths is done on local calendar days (midnight to
+    // midnight) so time-of-day, time zones and daylight-saving never shift the count.
+    function parseLocalDay(iso) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+      return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+    }
+    function dayDiff(a, b) { return Math.round((b - a) / 864e5); } // whole days from a to b
+    function getYearProgress(term) {
+      const ay = (term && academicYears.find(a => a.name === term.year)) || getActiveAcademicYear();
+      // Prefer the academic year's dates; fall back to the term's own dates if the year has none.
+      const src = (ay && ay.start && ay.end) ? ay : (term && term.start && term.end ? term : null);
+      if (!src) return null;
+      const start = parseLocalDay(src.start), end = parseLocalDay(src.end);
+      if (!start || !end || end < start) return null;
+      const n = new Date(), today = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+      const total = dayDiff(start, end) + 1;                       // inclusive of both start and end day
+      const elapsed = Math.max(0, Math.min(total, dayDiff(start, today) + 1));
+      const pct = Math.round(elapsed / total * 100);
+      const toStart = dayDiff(today, start), daysLeft = dayDiff(today, end);
+      let note;
+      if (toStart > 0) note = `starts in ${toStart} day${toStart === 1 ? '' : 's'}`;
+      else if (daysLeft < 0) note = `ended ${Math.abs(daysLeft)} day${daysLeft === -1 ? '' : 's'} ago`;
+      else if (daysLeft === 0) note = 'last day';
+      else note = `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
+      return { label: (ay && src === ay) ? ay.name : term.year, total, elapsed, pct, daysLeft, note };
+    }
+    function buildTermStripHtml(term) {
+      const yp = getYearProgress(term);
+      if (!yp) return null;
+      const dayTxt = yp.elapsed > 0 && yp.daysLeft >= 0 ? ` · Day ${yp.elapsed} of ${yp.total}` : '';
+      return `<div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row sm:items-center gap-3"><div class="text-sm font-bold text-slate-700 whitespace-nowrap">${esc(yp.label)} — ${esc(term.name)}</div><div class="flex-1 h-2.5 bg-slate-100 rounded-full"><div class="h-2.5 rounded-full bg-brand-600" style="width:${yp.pct}%"></div></div><div class="text-xs text-slate-500 whitespace-nowrap">${yp.pct}% elapsed${dayTxt} · ${yp.note}</div></div>`;
+    }
+
     function getActiveAcademicYear() {
       return academicYears.find(ay => ay.status === 'Active');
     }
