@@ -622,7 +622,7 @@
             <div class="w-9 h-9 shrink-0 rounded-full bg-brand-600 text-white font-bold flex items-center justify-center text-sm">1</div>
             <div>
               <h4 class="font-bold text-brand-900 text-sm">Sign In As Administrator</h4>
-              <p class="text-xs text-slate-500 mt-1 leading-relaxed">Log in with your admin email and password. Only the Administrator account can access Dashboard, Settings, and school-wide configuration.</p>
+              <p class="text-xs text-slate-500 mt-1 leading-relaxed">Log in with your admin email and password. Only the Administrator account can access the school-wide Dashboard, Settings, and school-wide configuration.</p>
             </div>
           </div>
 
@@ -786,7 +786,7 @@
 
       <nav class="flex-1 p-4 space-y-1 overflow-y-auto max-h-[calc(100vh-180px)]">
         <button data-tab="dashboard" onclick="switchTab('dashboard')" class="nav-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl hover:bg-brand-700/40 font-medium text-sm transition-all text-left">
-          <i data-lucide="layout-dashboard" class="w-5 h-5"></i> <span>Dashboard</span>
+          <i data-lucide="layout-dashboard" class="w-5 h-5"></i> <span id="nav-dashboard-label">Dashboard</span>
         </button>
         <button data-tab="students" onclick="switchTab('students')" class="nav-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl hover:bg-brand-700/40 font-medium text-sm transition-all text-left">
           <i data-lucide="users" class="w-5 h-5"></i> <span>Student Directory</span>
@@ -848,6 +848,7 @@
 
         <!-- ================= SECTION: TAB - DASHBOARD ================= -->
         <section id="tab-dashboard" class="tab-content space-y-6">
+          <div id="dash-admin-view" class="space-y-6">
           <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-2">
               <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Enrolled</span>
@@ -891,6 +892,34 @@
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div id="dash-teachers"></div>
             <div id="dash-quality"></div>
+          </div>
+          </div><!-- /dash-admin-view -->
+
+          <!-- ================= TEACHER DASHBOARD (Class Teacher / Subject Teacher) ================= -->
+          <!-- Shows only the classes, subjects and students this teacher is responsible for. -->
+          <div id="dash-teacher-view" class="hidden space-y-6">
+            <div id="tdash-welcome" class="bg-gradient-to-r from-brand-900 to-brand-700 text-white p-6 rounded-2xl shadow-sm"></div>
+            <div class="flex flex-wrap items-center gap-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm no-print">
+              <label class="text-xs font-bold text-slate-500">Class</label>
+              <select id="tdash-class-filter" onchange="renderTeacherDashboard()" class="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm"></select>
+              <label class="text-xs font-bold text-slate-500 ml-2">Pass mark (%)</label>
+              <input id="tdash-pass-mark" type="number" min="1" max="100" onchange="dashPrefs.passMark=Number(this.value)||50;dashSavePref();renderTeacherDashboard()" class="w-20 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm">
+              <div class="ml-auto flex gap-2">
+                <button onclick="exportTeacherDashboardExcel()" class="bg-white border border-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-lg hover:bg-slate-100 text-xs cursor-pointer">Export Watch-list (Excel)</button>
+                <button onclick="window.print()" class="bg-brand-600 text-white font-bold px-3 py-1.5 rounded-lg hover:bg-brand-700 text-xs cursor-pointer">Print Dashboard</button>
+              </div>
+            </div>
+            <div id="tdash-term-strip"></div>
+            <div id="tdash-kpis" class="grid grid-cols-2 lg:grid-cols-6 gap-4"></div>
+            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+              <h3 class="text-sm font-bold text-slate-700">My Tasks <span class="font-normal text-slate-400">— what needs your attention now</span></h3>
+              <div id="tdash-alerts" class="grid grid-cols-1 lg:grid-cols-2 gap-2"></div>
+            </div>
+            <div id="tdash-today"></div>
+            <div id="tdash-classes" class="grid grid-cols-1 lg:grid-cols-2 gap-6"></div>
+            <div id="tdash-readiness"></div>
+            <div id="tdash-charts" class="grid grid-cols-1 lg:grid-cols-2 gap-6"></div>
+            <div id="tdash-lists" class="grid grid-cols-1 lg:grid-cols-3 gap-6"></div>
           </div>
         </section>
 
@@ -4007,8 +4036,8 @@
     // Which sidebar tabs each role is allowed to open.
     const ROLE_TABS = {
       'Admin':           ['dashboard', 'students', 'staff', 'timetable', 'submissions', 'scores', 'attendance', 'reports', 'academicHistory', 'settings'],
-      'Class Teacher':   ['students', 'timetable', 'submissions', 'scores', 'attendance', 'reports', 'academicHistory'],
-      'Subject Teacher': ['students', 'timetable', 'submissions', 'scores'],
+      'Class Teacher':   ['dashboard', 'students', 'timetable', 'submissions', 'scores', 'attendance', 'reports', 'academicHistory'],
+      'Subject Teacher': ['dashboard', 'students', 'timetable', 'submissions', 'scores'],
       'Parent':          ['reports', 'attendance', 'academicHistory']
     };
     const TAB_LABELS = {
@@ -4345,6 +4374,14 @@
       document.querySelectorAll('.report-card-only').forEach(el => {
         el.classList.toggle('hidden', !canViewReportCards());
       });
+
+      // Dashboard: Admin sees the school-wide view; teachers see only their own classes/subjects.
+      const dashAdminEl = document.getElementById('dash-admin-view');
+      const dashTeacherEl = document.getElementById('dash-teacher-view');
+      if (dashAdminEl) dashAdminEl.classList.toggle('hidden', currentRole !== 'Admin');
+      if (dashTeacherEl) dashTeacherEl.classList.toggle('hidden', currentRole === 'Admin');
+      const navDashLabel = document.getElementById('nav-dashboard-label');
+      if (navDashLabel) navDashLabel.textContent = currentRole === 'Admin' ? 'Dashboard' : 'My Dashboard';
 
       const canEditRemark = currentRole === 'Admin';
       document.querySelectorAll('.head-remark-edit-only').forEach(el => {
@@ -4753,7 +4790,7 @@
       if (target) target.classList.remove('hidden');
 
       const titles = {
-        dashboard: 'Dashboard',
+        dashboard: currentRole === 'Admin' ? 'Dashboard' : 'My Dashboard',
         students: 'Student Directory',
         staff: 'Staff Directory',
         timetable: 'Timetable & Duty Roster',
@@ -4804,6 +4841,8 @@
       populateClassDropdowns();
       if (isAdminView) {
         renderDashboardAnalytics();
+      } else if (isTeacherAccount()) {
+        try { renderTeacherDashboard(); } catch (e) { console.warn('Teacher dashboard could not be drawn:', e); }
       } else {
         Object.keys(dashboardChartInstances).forEach(destroyDashboardChart);
       }
@@ -5063,6 +5102,313 @@
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Watch-list');
       XLSX.writeFile(wb, 'telos-watchlist.xlsx');
+    }
+
+    // ================= TEACHER DASHBOARD (added) =================
+    // Read-only and purely additive: it only READS the existing data arrays (studentList, subjects,
+    // classesStreams, assessmentScores, attendanceRecords, classTimetables, ...) and never writes to
+    // them, so it has no effect on saving or on the Supabase connection.
+    // Scope:
+    //   Class they lead      -> the whole class: every subject, attendance, remarks, report-card readiness.
+    //   Class they teach in  -> only the subject(s) they personally teach there, and only those scores.
+    // Nothing outside the teacher's own classes/subjects is ever read into this view.
+    function teacherDashAllNames() {
+      const access = currentTeacherAccess();
+      if (!access) return [];
+      return [...new Set([...access.led, ...access.taught])].filter(n => classesStreams.some(c => c.name === n));
+    }
+
+    function teacherDashCompute() {
+      const access = currentTeacherAccess();
+      if (!access || !currentStaffRecord) return null;
+      const me = currentStaffRecord.name;
+      const pm = Number(dashPrefs.passMark) || 50;
+      const sel = document.getElementById('tdash-class-filter');
+      const cf = (sel && sel.value) || '';
+      const led = access.led.filter(n => classesStreams.some(c => c.name === n));
+      const allNames = teacherDashAllNames();
+      const names = cf ? allNames.filter(n => n === cf) : allNames;
+      const cell = (sid, code) => { const r = assessmentScores[sid] && assessmentScores[sid][code]; return r && (r.t1 + r.t2 + r.proj + r.exam) > 0 ? r : null; };
+      const total = r => r.t1 + r.t2 + r.proj + r.exam / 2;
+
+      const byClass = {}, pairs = [], ledSubj = {}, grades = {}, stu = [];
+      [...getGradingScale().bands].sort((a, b) => b.min - a.min).forEach(b => { grades[b.grade] = 0; });
+
+      names.forEach(cn => {
+        const cls = classesStreams.find(c => c.name === cn);
+        const isLed = led.includes(cn);
+        const studs = studentList.filter(s => s.class === cn && (s.status || 'Active') === 'Active');
+        const allSubs = subjects.filter(su => (su.classes || []).includes(cn) && su.status !== 'Inactive');
+        const mine = allSubs.filter(su => getSubjectTeachersForClass(su, cn).includes(me));
+        const focus = isLed ? allSubs : mine; // what this teacher may see in this class
+        const k = byClass[cn] = { name: cn, cls, isLed, studs, allSubs, mine, focus, n: studs.length,
+          exp: 0, done: 0, mExp: 0, mDone: 0, sum: 0, cnt: 0, attO: 0, attP: 0, attRec: 0, ctRem: 0, hdRem: 0, male: 0, female: 0 };
+        const pairMap = {};
+        mine.forEach(su => {
+          const pr = { cn, su, exp: studs.length, done: 0, sum: 0, ca: 0, ex: 0 };
+          pairMap[su.code] = pr; pairs.push(pr);
+        });
+        studs.forEach(s => {
+          if (s.gender === 'Male') k.male++; else if (s.gender === 'Female') k.female++;
+          let sum = 0, cnt = 0, fails = 0;
+          focus.forEach(su => {
+            k.exp++;
+            const r = cell(s.id, su.code); if (!r) return;
+            k.done++;
+            const t = total(r); sum += t; cnt++; if (t < pm) fails++;
+            const g = gradeForTotal(t); grades[g] = (grades[g] || 0) + 1;
+            if (isLed) {
+              const x = ledSubj[su.code] = ledSubj[su.code] || { name: su.name, sum: 0, cnt: 0 };
+              x.sum += t; x.cnt++;
+            }
+          });
+          mine.forEach(su => {
+            k.mExp++;
+            const r = cell(s.id, su.code); if (!r) return;
+            const pr = pairMap[su.code];
+            k.mDone++; pr.done++; pr.sum += total(r);
+            pr.ca += (r.t1 + r.t2 + r.proj) * 2; pr.ex += r.exam;
+          });
+          const avg = cnt ? sum / cnt : null;
+          if (avg !== null) { k.sum += avg; k.cnt++; }
+          let rate = null;
+          if (isLed) {
+            const a = attendanceRecords[s.id];
+            if (a) { k.attRec++; k.attO += a.opened; k.attP += a.present; rate = a.opened ? a.present / a.opened * 100 : null; }
+            if (classTeacherRemarks[s.id] && classTeacherRemarks[s.id].remark) k.ctRem++;
+            if (headRemarks[s.id]) k.hdRem++;
+          }
+          stu.push({ s, cn, isLed, avg, fails, rate });
+        });
+      });
+      return { me, access, pm, cf, led, allNames, names, byClass, pairs, ledSubj, grades, stu };
+    }
+
+    function renderTeacherDashboard() {
+      const tab = document.getElementById('tab-dashboard');
+      if (!tab || tab.classList.contains('hidden')) return;
+      if (!isTeacherAccount()) return;
+
+      // Class filter lists only this teacher's own classes.
+      const sel = document.getElementById('tdash-class-filter');
+      const allNames = teacherDashAllNames();
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">All My Classes</option>' + allNames.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+      sel.value = allNames.includes(cur) ? cur : '';
+      const pmEl = document.getElementById('tdash-pass-mark');
+      if (document.activeElement !== pmEl) pmEl.value = dashPrefs.passMark || 50;
+
+      const d = teacherDashCompute();
+      if (!d) return;
+      const { me, access, pm, names, byClass, pairs, ledSubj, grades, stu } = d;
+      const K = names.map(n => byClass[n]);
+      const ledK = K.filter(k => k.isLed);
+      const hasLed = ledK.length > 0, hasMine = pairs.length > 0;
+      const sumK = (arr, f) => arr.reduce((a, k) => a + k[f], 0);
+      const pct = (a, b) => b ? Math.round(a / b * 1000) / 10 : 0;
+      const avgs = stu.filter(x => x.avg !== null);
+      const allAvg = avgs.length ? avgs.reduce((a, x) => a + x.avg, 0) / avgs.length : null;
+      const passRate = pct(avgs.filter(x => x.avg >= pm).length, avgs.length);
+      const studentCount = sumK(K, 'n');
+
+      // ---- Welcome banner ----
+      const badges = [];
+      K.forEach(k => {
+        if (k.isLed) badges.push(`Class Teacher · ${esc(k.name)}`);
+        k.mine.forEach(su => badges.push(`${esc(su.name)} · ${esc(k.name)}`));
+      });
+      document.getElementById('tdash-welcome').innerHTML =
+        `<p class="text-[11px] uppercase tracking-widest text-brand-100">Welcome back</p>
+         <h3 class="text-2xl font-black mt-1">${esc(me)}</h3>
+         <p class="text-sm text-brand-100 mt-1">${esc(roleLabelFor(currentRole, access))} · ${esc(systemSettings.academicYear || '')} · ${esc(systemSettings.term || '')}</p>
+         <div class="mt-3 flex flex-wrap gap-2">${badges.map(b => `<span class="bg-white/15 text-white text-[11px] font-bold px-2.5 py-1 rounded-full">${b}</span>`).join('') || '<span class="text-xs text-brand-100">No class or subject has been assigned to you yet. Please contact the Administrator.</span>'}</div>`;
+
+      // ---- Nothing assigned: stop here, show nothing school-wide ----
+      const emptyIds = ['tdash-kpis', 'tdash-alerts', 'tdash-today', 'tdash-classes', 'tdash-readiness', 'tdash-charts', 'tdash-lists', 'tdash-term-strip'];
+      ['tAvg', 'tCa', 'tGrades', 'tSubj', 'tAtt'].forEach(destroyDashboardChart);
+      if (!K.length) {
+        emptyIds.forEach(id => { document.getElementById(id).innerHTML = ''; });
+        document.getElementById('tdash-alerts').innerHTML = '<div class="text-xs border rounded-xl px-3 py-2 bg-sky-50 border-sky-200 text-sky-800 lg:col-span-2">You have not been assigned to a class or subject yet. Once the Administrator assigns you, your dashboard will fill in automatically.</div>';
+        return;
+      }
+
+      // ---- KPI cards ----
+      const kpi = (label, val, sub, tone) => `<div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm"><span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">${label}</span><p class="text-2xl font-extrabold ${tone || 'text-brand-900'} mt-1">${val}</p><p class="text-[11px] text-slate-400 mt-0.5">${sub}</p></div>`;
+      const good = (v, hi, lo) => v >= hi ? 'text-emerald-600' : v >= lo ? 'text-amber-500' : 'text-red-500';
+      const scopeTxt = hasLed ? (hasMine && K.some(k => !k.isLed) ? 'your class + your subjects' : 'all subjects in your class') : 'your subject(s)';
+      const myDone = hasMine ? sumK(K, 'mDone') : sumK(K, 'done'), myExp = hasMine ? sumK(K, 'mExp') : sumK(K, 'exp');
+      const attO = sumK(ledK, 'attO'), attP = sumK(ledK, 'attP');
+      document.getElementById('tdash-kpis').innerHTML =
+        kpi('My Classes', K.length, `${ledK.length ? 'lead ' + ledK.length : ''}${ledK.length && K.length > ledK.length ? ' · ' : ''}${K.length > ledK.length ? 'teach in ' + (K.length - ledK.length) : ''}`) +
+        kpi('My Students', studentCount, 'active learners in your classes') +
+        kpi('Average Score', allAvg === null ? '—' : allAvg.toFixed(1) + '%', scopeTxt, allAvg === null ? '' : good(allAvg, pm + 15, pm)) +
+        kpi('Pass Rate', avgs.length ? passRate + '%' : '—', `students averaging ≥ ${pm}%`, avgs.length ? good(passRate, 80, 60) : '') +
+        kpi(hasMine ? 'My Scores Entered' : 'Scores Entered', myExp ? pct(myDone, myExp) + '%' : '—', `${myDone} of ${myExp} scores`, myExp ? good(pct(myDone, myExp), 95, 60) : '') +
+        (hasLed
+          ? kpi('Class Attendance', attO ? pct(attP, attO) + '%' : '—', `${sumK(ledK, 'attRec')} of ${sumK(ledK, 'n')} students recorded`, attO ? good(pct(attP, attO), 90, 80) : '')
+          : kpi('My Subjects', pairs.length, 'class-subject assignments'));
+
+      // ---- Term strip ----
+      const term = terms.find(t => t.status === 'Active' && !t.locked) || terms.find(t => !t.locked && t.name === systemSettings.term);
+      let daysLeft = null;
+      let termHtml = '<div class="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-2xl p-4">No open term is set. Please contact the Administrator.</div>';
+      if (term && term.start && term.end) {
+        const s0 = new Date(term.start), e0 = new Date(term.end), now = new Date();
+        daysLeft = Math.ceil((e0 - now) / 864e5);
+        const prog = Math.max(0, Math.min(100, Math.round((now - s0) / (e0 - s0) * 100)));
+        termHtml = `<div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row sm:items-center gap-3"><div class="text-sm font-bold text-slate-700 whitespace-nowrap">${esc(term.year)} — ${esc(term.name)}</div><div class="flex-1 h-2.5 bg-slate-100 rounded-full"><div class="h-2.5 rounded-full bg-brand-600" style="width:${prog}%"></div></div><div class="text-xs text-slate-500 whitespace-nowrap">${prog}% elapsed · ${daysLeft >= 0 ? daysLeft + ' days left' : 'ended ' + Math.abs(daysLeft) + ' days ago'}</div></div>`;
+      }
+      document.getElementById('tdash-term-strip').innerHTML = termHtml;
+
+      // ---- My Tasks (only things this teacher can act on) ----
+      const A = [];
+      const push = (lvl, msg, tabId) => A.push({ lvl, msg, tab: tabId });
+      const urgent = daysLeft !== null && daysLeft <= 14;
+      pairs.forEach(p => {
+        const miss = p.exp - p.done;
+        if (miss > 0) push(urgent ? 'red' : 'amber', `${p.su.name} (${p.cn}): scores missing for ${miss} of ${p.exp} student(s).`, 'scores');
+      });
+      const pairAvgs = pairs.filter(p => p.done).map(p => ({ p, avg: p.sum / p.done })).sort((a, b) => a.avg - b.avg);
+      if (pairAvgs.length && pairAvgs[0].avg < pm) push('amber', `${pairAvgs[0].p.su.name} in ${pairAvgs[0].p.cn} averages ${pairAvgs[0].avg.toFixed(1)}% — below the ${pm}% pass mark.`, 'scores');
+      ledK.forEach(k => {
+        const unrec = k.n - k.attRec;
+        if (k.n && unrec > 0) push('amber', `${k.name}: attendance not yet recorded for ${unrec} student(s).`, 'attendance');
+        const chronic = stu.filter(x => x.cn === k.name && x.rate !== null && x.rate < 80).length;
+        if (chronic) push('amber', `${k.name}: ${chronic} student(s) have attendance below 80%.`, 'attendance');
+        const noRem = k.n - k.ctRem;
+        if (k.n && noRem > 0) push(urgent ? 'red' : 'blue', `${k.name}: Class Teacher's remark still to be written for ${noRem} student(s).`, 'reports');
+        const incomplete = k.exp - k.done;
+        if (incomplete > 0) push('blue', `${k.name}: ${incomplete} subject score(s) from all teachers are still outstanding before report cards are ready.`, 'reports');
+        if (!(classTimetables[k.name] || []).length) push('blue', `${k.name} has no saved timetable yet (the Administrator sets this).`, 'timetable');
+      });
+      const atRisk = stu.filter(x => x.avg !== null && (x.avg < pm || x.fails >= 2));
+      if (atRisk.length) push('red', `${atRisk.length} student(s) in your classes are academically at risk (below ${pm}% average or failing 2+ subjects).`, 'students');
+      if (urgent && daysLeft >= 0) push('amber', `Term ends in ${daysLeft} day(s).`, 'scores');
+      if (!A.length) push('green', 'All clear — nothing needs your attention right now.', 'dashboard');
+      const tone = { red: 'bg-red-50 border-red-200 text-red-800', amber: 'bg-amber-50 border-amber-200 text-amber-800', blue: 'bg-sky-50 border-sky-200 text-sky-800', green: 'bg-emerald-50 border-emerald-200 text-emerald-800' };
+      const ord = { red: 0, amber: 1, blue: 2, green: 3 };
+      document.getElementById('tdash-alerts').innerHTML = A.sort((a, b) => ord[a.lvl] - ord[b.lvl]).map(a =>
+        `<button onclick="switchTab('${a.tab}')" class="text-left text-xs border rounded-xl px-3 py-2 cursor-pointer hover:opacity-80 ${tone[a.lvl]}">${esc(a.msg)}</button>`).join('');
+
+      // ---- Shared small helpers for cards ----
+      const bar = p => `<div class="flex items-center gap-2"><div class="h-2 w-24 bg-slate-100 rounded"><div class="h-2 rounded ${p >= 100 ? 'bg-emerald-500' : p >= 60 ? 'bg-amber-400' : 'bg-red-400'}" style="width:${Math.min(100, p)}%"></div></div><span class="text-xs font-mono">${p}%</span></div>`;
+      const card = (title, sub, body) => `<div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3 overflow-x-auto"><div><h3 class="text-sm font-bold text-slate-700">${title}</h3><p class="text-xs text-slate-400">${sub}</p></div>${body}</div>`;
+      const th = 'p-2 text-left text-[11px] uppercase text-slate-400 font-bold';
+
+      // ---- Today's lessons (from the saved class timetables of this teacher's own classes) ----
+      const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const dayNames = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday' };
+      const di = new Date().getDay();
+      let dk = dayKeys[di], dayNote = '';
+      if (di === 0 || di === 6) { dk = 'mon'; dayNote = ' (next school day)'; }
+      const lessons = [];
+      K.forEach(k => {
+        const mineNames = k.mine.map(su => String(su.name || '').toLowerCase()).filter(Boolean);
+        const mineCodes = k.mine.map(su => String(su.code || '').toLowerCase()).filter(Boolean);
+        (classTimetables[k.name] || []).forEach(r => {
+          const txt = String(r[dk] || '').trim(); if (!txt) return;
+          const low = txt.toLowerCase();
+          const isMine = mineNames.some(n => low.includes(n)) || mineCodes.includes(low);
+          if (k.isLed || isMine) lessons.push({ time: r.time || '', cn: k.name, txt, isMine });
+        });
+      });
+      const anyTT = K.some(k => (classTimetables[k.name] || []).length);
+      document.getElementById('tdash-today').innerHTML = card(`Today's Lessons — ${dayNames[dk]}${dayNote}`, 'From the saved timetable of your own classes. Lessons for your subjects are highlighted.',
+        lessons.length ? `<table class="w-full text-sm"><thead><tr><th class="${th}">Time</th><th class="${th}">Class</th><th class="${th}">Lesson</th></tr></thead><tbody class="divide-y divide-slate-100">` +
+          lessons.map(l => `<tr class="${l.isMine ? 'bg-brand-50' : ''}"><td class="p-2 font-mono text-xs">${esc(l.time)}</td><td class="p-2 font-semibold">${esc(l.cn)}</td><td class="p-2">${esc(l.txt)}${l.isMine ? ' <span class="ml-1 text-[10px] font-bold text-brand-700 bg-white border border-brand-200 px-1.5 py-0.5 rounded">Your lesson</span>' : ''}</td></tr>`).join('') + '</tbody></table>'
+          : `<p class="text-sm text-slate-400">${anyTT ? 'No lessons for you on the saved timetable for this day.' : 'No timetable has been saved for your classes yet.'}</p>`);
+
+      // ---- One card per class ----
+      document.getElementById('tdash-classes').innerHTML = K.map(k => {
+        const avg = k.cnt ? (k.sum / k.cnt) : null;
+        const role = [k.isLed ? '<span class="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">Class Teacher</span>' : '', k.mine.length ? '<span class="text-[10px] font-bold bg-brand-50 text-brand-700 px-2 py-0.5 rounded">Subject Teacher</span>' : ''].join(' ');
+        const subjLine = k.isLed
+          ? `Subjects: ${esc(k.allSubs.map(su => su.name).join(', ') || 'none assigned yet')}`
+          : `You teach: ${esc(k.mine.map(su => su.name).join(', '))}`;
+        const sc = k.isLed ? pct(k.done, k.exp) : pct(k.mDone, k.mExp);
+        const row = (l, v) => `<div class="flex items-center justify-between gap-3"><span class="text-xs text-slate-500">${l}</span>${v}</div>`;
+        const links = [`<button onclick="switchTab('scores')" class="text-xs font-bold text-brand-700 hover:underline cursor-pointer">Enter scores</button>`]
+          .concat(k.isLed ? [`<button onclick="switchTab('attendance')" class="text-xs font-bold text-brand-700 hover:underline cursor-pointer">Attendance</button>`, `<button onclick="switchTab('reports')" class="text-xs font-bold text-brand-700 hover:underline cursor-pointer">Report cards</button>`] : []);
+        return `<div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+          <div class="flex items-start justify-between gap-2"><div><h3 class="text-lg font-black text-brand-900">${esc(k.name)}</h3><p class="text-xs text-slate-400">${k.n} student(s)${k.isLed ? ` · ${k.male} boys, ${k.female} girls` : ''}</p></div><div class="flex gap-1 flex-wrap justify-end">${role}</div></div>
+          <p class="text-xs text-slate-500">${subjLine}</p>
+          ${row(k.isLed ? 'Scores entered (all subjects)' : 'Scores entered (your subjects)', bar(sc))}
+          ${row(k.isLed ? 'Class average' : 'Average in your subjects', `<span class="text-sm font-bold ${avg === null ? 'text-slate-300' : good(avg, pm + 15, pm)}">${avg === null ? '—' : avg.toFixed(1) + '%'}</span>`)}
+          ${k.isLed ? row('Attendance rate', `<span class="text-sm font-bold ${k.attO ? good(pct(k.attP, k.attO), 90, 80) : 'text-slate-300'}">${k.attO ? pct(k.attP, k.attO) + '%' : '—'}</span>`) : ''}
+          <div class="flex gap-4 pt-1 no-print">${links.join('')}</div>
+        </div>`;
+      }).join('');
+
+      // ---- Report-card readiness (classes they lead only) ----
+      document.getElementById('tdash-readiness').innerHTML = hasLed ? card('My Class — Report-Card Readiness', 'Everything should reach 100% before the term is locked.',
+        `<table class="w-full text-sm"><thead><tr><th class="${th}">Class</th><th class="${th}">Students</th><th class="${th}">Scores</th><th class="${th}">Attendance</th><th class="${th}">Your Remark</th><th class="${th}">Head Remark</th></tr></thead><tbody class="divide-y divide-slate-100">` +
+        ledK.map(k => `<tr><td class="p-2 font-semibold">${esc(k.name)}</td><td class="p-2">${k.n}</td><td class="p-2">${bar(pct(k.done, k.exp))}</td><td class="p-2">${bar(pct(k.attRec, k.n))}</td><td class="p-2">${bar(pct(k.ctRem, k.n))}</td><td class="p-2">${bar(pct(k.hdRem, k.n))}</td></tr>`).join('') + '</tbody></table>') : '';
+
+      // ---- Charts ----
+      const chartDefs = [];
+      if (hasMine) {
+        chartDefs.push(['tAvg', 'My Subjects: Average by Class', 'Which of your subjects are below the pass mark?']);
+        chartDefs.push(['tCa', 'My Subjects: Class Score vs Exam (as %)', 'Big gaps hint at inflated class scores or weak exam preparation.']);
+      }
+      chartDefs.push(['tGrades', 'Grade Distribution', 'How the scores you can see are spread under the grading scale.']);
+      if (hasLed) {
+        chartDefs.push(['tSubj', 'Subject Performance in My Class', 'Which subjects in your class need support?']);
+        chartDefs.push(['tAtt', 'Attendance vs Average Score', 'Does absence hurt results? Each dot is a student in your class.']);
+      }
+      document.getElementById('tdash-charts').innerHTML = chartDefs.map(([id, t, q]) =>
+        `<div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-1"><h3 class="text-sm font-bold text-slate-700">${t}</h3><p class="text-xs text-slate-400 pb-2">${q}</p><div class="h-64"><canvas id="dc-${id}"></canvas></div></div>`).join('');
+
+      if (typeof Chart !== 'undefined') {
+        const mk = (key, cfg) => { destroyDashboardChart(key); dashboardChartInstances[key] = new Chart(document.getElementById('dc-' + key), cfg); };
+        const base = { responsive: true, maintainAspectRatio: false };
+        const ys = { y: { beginAtZero: true, max: 100 } };
+        if (hasMine) {
+          const lbl = pairs.map(p => K.length > 1 ? `${p.su.name} (${p.cn})` : p.su.name);
+          const pav = pairs.map(p => p.done ? +(p.sum / p.done).toFixed(1) : 0);
+          mk('tAvg', { type: 'bar', data: { labels: lbl, datasets: [
+            { label: 'Average score', data: pav, backgroundColor: pav.map(v => v < pm ? '#ef4444' : v < pm + 15 ? '#f59e0b' : '#22c55e'), borderRadius: 6 },
+            { type: 'line', label: 'Pass mark', data: lbl.map(() => pm), borderColor: '#ef4444', borderDash: [6, 4], pointRadius: 0, borderWidth: 2 }] }, options: { ...base, scales: ys } });
+          mk('tCa', { type: 'bar', data: { labels: lbl, datasets: [
+            { label: 'Class score %', data: pairs.map(p => p.done ? +(p.ca / p.done).toFixed(1) : 0), backgroundColor: '#6366f1', borderRadius: 4 },
+            { label: 'Exam %', data: pairs.map(p => p.done ? +(p.ex / p.done).toFixed(1) : 0), backgroundColor: '#f59e0b', borderRadius: 4 }] }, options: { ...base, scales: ys } });
+        }
+        mk('tGrades', { type: 'bar', data: { labels: Object.keys(grades), datasets: [{ label: 'Scores', data: Object.values(grades), backgroundColor: '#818cf8', borderRadius: 6 }] }, options: { ...base, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } } });
+        if (hasLed) {
+          const sa = Object.values(ledSubj).map(x => ({ name: x.name, avg: x.sum / x.cnt })).sort((a, b) => a.avg - b.avg);
+          mk('tSubj', { type: 'bar', data: { labels: sa.map(x => x.name), datasets: [{ label: 'Average', data: sa.map(x => +x.avg.toFixed(1)), backgroundColor: sa.map(x => x.avg < pm ? '#ef4444' : x.avg < pm + 15 ? '#f59e0b' : '#22c55e'), borderRadius: 6 }] }, options: { ...base, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, max: 100 } } } });
+          const pts = stu.filter(x => x.isLed && x.avg !== null && x.rate !== null).map(x => ({ x: +x.rate.toFixed(1), y: +x.avg.toFixed(1) }));
+          mk('tAtt', { type: 'scatter', data: { datasets: [{ label: 'Students', data: pts, backgroundColor: '#4f46e5' }] }, options: { ...base, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'Attendance %' }, min: 0, max: 100 }, y: { title: { display: true, text: 'Average score' }, min: 0, max: 100 } } } });
+        }
+      }
+
+      // ---- Lists ----
+      const list = (rows, fmt) => rows.length ? `<ul class="divide-y divide-slate-100 text-sm">${rows.map(r => `<li class="py-1.5 flex justify-between gap-2"><span>${esc(r.s.name)} <span class="text-xs text-slate-400">${esc(r.s.class)}</span></span><span class="font-mono font-bold">${fmt(r)}</span></li>`).join('')}</ul>` : '<p class="text-sm text-slate-400">None — good news.</p>';
+      const third = hasLed
+        ? card('Attendance Watch-list', 'Your class — below 80%. Follow up with guardians.', list(stu.filter(x => x.isLed && x.rate !== null && x.rate < 80).sort((a, b) => a.rate - b.rate).slice(0, 8), r => r.rate.toFixed(0) + '%'))
+        : card('Scores Still To Enter', 'Your subjects with missing scores.', pairs.filter(p => p.exp - p.done > 0).length
+            ? `<ul class="divide-y divide-slate-100 text-sm">${pairs.filter(p => p.exp - p.done > 0).slice(0, 8).map(p => `<li class="py-1.5 flex justify-between gap-2"><span>${esc(p.su.name)} <span class="text-xs text-slate-400">${esc(p.cn)}</span></span><span class="font-mono font-bold">${p.exp - p.done} left</span></li>`).join('')}</ul>`
+            : '<p class="text-sm text-slate-400">All scores entered — well done.</p>');
+      document.getElementById('tdash-lists').innerHTML =
+        card('Students Needing Support', hasLed ? 'Lowest averages in your class — plan remedial support.' : 'Lowest averages in your subject(s) — plan remedial support.', list(atRisk.sort((a, b) => a.avg - b.avg).slice(0, 8), r => r.avg.toFixed(1) + '%')) +
+        card('Top Performers', hasLed ? 'Highest averages in your class.' : 'Highest averages in your subject(s).', list([...avgs].sort((a, b) => b.avg - a.avg).slice(0, 8), r => r.avg.toFixed(1) + '%')) +
+        third;
+    }
+
+    function exportTeacherDashboardExcel() {
+      const d = teacherDashCompute();
+      if (!d) return;
+      const rows = [['Student ID', 'Name', 'Class', 'Average %', 'Subjects below pass mark', 'Attendance %', 'Flags']];
+      d.stu.forEach(x => {
+        const f = [];
+        if (x.avg !== null && (x.avg < d.pm || x.fails >= 2)) f.push('Academic risk');
+        if (x.isLed && x.rate !== null && x.rate < 80) f.push('Low attendance');
+        if (x.isLed && x.rate === null) f.push('Attendance not recorded');
+        if (f.length) rows.push([x.s.id, x.s.name, x.cn, x.avg === null ? '' : x.avg.toFixed(1), x.fails, x.rate === null ? '' : x.rate.toFixed(0), f.join('; ')]);
+      });
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'My Watch-list');
+      XLSX.writeFile(wb, 'telos-my-watchlist.xlsx');
     }
 
     // --- Staff Directory Logic ---
