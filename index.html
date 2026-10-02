@@ -1777,8 +1777,11 @@
                 <div class="flex items-center gap-2 flex-wrap">
                   <label for="grading-format-select" class="text-xs font-bold text-slate-600">Grade format</label>
                   <select id="grading-format-select" onchange="onGradingFormatChange()" class="bg-white border border-slate-200 rounded-lg p-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600"></select>
+                  <button type="button" id="btn-toggle-grading-list" onclick="toggleConfigList('grading')" class="bg-white text-slate-700 border border-slate-300 font-bold px-3 py-1.5 rounded-lg text-xs hover:bg-slate-100 cursor-pointer">Hide List</button>
                 </div>
               </div>
+              <p id="grading-list-hidden-note" class="hidden text-[11px] text-slate-500 italic bg-white border rounded-lg p-3">The grading scale and remarks list is hidden. Click "Show List" to view it.</p>
+              <div id="grading-list-wrap" class="space-y-3">
               <div class="overflow-x-auto bg-white rounded-lg border">
                 <table class="w-full text-left text-xs text-slate-600">
                   <thead class="bg-slate-100 font-bold text-slate-500 uppercase">
@@ -1801,6 +1804,7 @@
                 <span id="grading-scale-status" class="hidden text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2"></span>
               </div>
               <p class="text-[10px] text-slate-400">Ranges are whole percentages and must cover 0&ndash;100 with no gaps or overlaps. A total such as 79.5 stays in the band that contains 79 (it is never rounded up).</p>
+              </div>
             </div>
 
             <!-- CLASS TEACHER ONLY: Report Card Quick Picks (hidden for every other role) -->
@@ -9512,7 +9516,7 @@
       try { renderReportCard(); } catch (e) { /* report card not on screen */ }
     }
 
-    // ---- Hide / show the Classes list and the Subjects & teacher-assignment list (Settings > Academic Setup) ----
+    // ---- Hide / show the Classes list, the Subjects & teacher-assignment list and the Grading Scale & Remarks list (Settings > Academic Setup) ----
     // Display-only preference kept in this browser (localStorage). It never edits classesStreams or
     // subjects and never touches Supabase. Only the Administrator can see the toggles (Settings is
     // Admin-only); anything else always sees the lists as before.
@@ -9522,7 +9526,7 @@
     }
     function applyConfigListVisibility() {
       const prefs = getConfigListHidden();
-      ['classes', 'subjects'].forEach(key => {
+      ['classes', 'subjects', 'grading'].forEach(key => {
         const hidden = !!prefs[key];
         const wrap = document.getElementById(key + '-list-wrap');
         const note = document.getElementById(key + '-list-hidden-note');
@@ -9533,7 +9537,7 @@
       });
     }
     function toggleConfigList(key) {
-      if (key !== 'classes' && key !== 'subjects') return;
+      if (key !== 'classes' && key !== 'subjects' && key !== 'grading') return;
       const prefs = getConfigListHidden();
       prefs[key] = !prefs[key];
       try { localStorage.setItem(CONFIG_LIST_HIDDEN_KEY, JSON.stringify(prefs)); } catch (e) {}
