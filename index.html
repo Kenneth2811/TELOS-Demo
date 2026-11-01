@@ -29,6 +29,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Supabase JS SDK & Client Preparation -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
   <!-- Chart.js for Dashboard Analytics (added: does not affect any existing logic) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <!-- SheetJS for Excel (.xlsx) bulk-upload template generation & parsing -->
@@ -812,6 +813,9 @@
         <button data-tab="academicHistory" onclick="switchTab('academicHistory')" class="nav-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl hover:bg-brand-700/40 font-medium text-sm transition-all text-left">
           <i data-lucide="archive" class="w-5 h-5"></i> <span>Academic History</span>
         </button>
+        <button data-tab="dataManagement" onclick="switchTab('dataManagement')" class="nav-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl hover:bg-brand-700/40 font-medium text-sm transition-all text-left">
+          <i data-lucide="database-backup" class="w-5 h-5"></i> <span>Data Management</span>
+        </button>
         <button id="nav-settings" data-tab="settings" onclick="switchTab('settings')" class="nav-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl hover:bg-brand-700/40 font-medium text-sm transition-all text-left">
           <i data-lucide="settings" class="w-5 h-5"></i> <span id="nav-settings-label">Admin Settings</span>
         </button>
@@ -1485,6 +1489,32 @@
              is locked, its scores/attendance/remarks are snapshotted here permanently and
              the live Assessment sheet is cleared for the next term. Nothing on this tab is
              editable by any role, including Admin. -->
+        <section id="tab-dataManagement" class="tab-content hidden space-y-6">
+          <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+            <h3 class="font-bold text-slate-800">Storage Monitor <span class="text-xs font-normal text-slate-400">(Supabase Free Plan: 500 MB database, 1 GB files)</span></h3>
+            <div id="dm-usage" class="space-y-2"></div>
+          </div>
+          <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+            <h3 class="font-bold text-slate-800">Backup &amp; Restore</h3>
+            <p class="text-sm text-slate-500">Exports students, staff, scores, report cards, settings and uploaded files into one compressed ZIP with checksums. Save it anywhere: Google Drive / OneDrive / Dropbox folders, a USB stick, an external drive or this computer.</p>
+            <div class="flex flex-wrap gap-2">
+              <button onclick="dmCreateBackup()" class="px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-semibold">1. Create full backup</button>
+              <label class="px-4 py-2 rounded-lg bg-slate-100 text-sm font-semibold cursor-pointer">2. Verify saved backup<input type="file" accept=".zip" class="hidden" onchange="dmVerifyBackup(this)"></label>
+              <label class="px-4 py-2 rounded-lg bg-amber-100 text-amber-800 text-sm font-semibold cursor-pointer">Restore from backup<input type="file" accept=".zip" class="hidden" onchange="dmRestoreBackup(this)"></label>
+              <button id="dm-share" onclick="dmShareBackup()" class="hidden px-4 py-2 rounded-lg bg-slate-100 text-sm font-semibold">Send to another app…</button>
+            </div>
+            <table class="text-sm w-full"><tbody id="dm-backups"></tbody></table>
+          </div>
+          <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+            <h3 class="font-bold text-slate-800">Clean Up Completed Terms</h3>
+            <p class="text-sm text-slate-500">Removes a locked term's archived report cards/results from the live database only after steps 1 and 2 above succeed and the server confirms the backup matches. Student and staff directories are never touched. The term stays visible in Academic History.</p>
+            <div class="flex flex-wrap gap-2 items-center"><select id="dm-term-select" class="bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm"></select>
+              <button onclick="dmRunCleanup()" class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold">3. Archive &amp; remove from live database</button></div>
+            <div class="text-xs font-semibold text-slate-500 pt-2">Archived terms</div><div id="dm-archived"></div>
+          </div>
+          <div id="dm-log" class="bg-slate-900/5 rounded-xl p-3 text-xs font-mono max-h-48 overflow-auto"></div>
+        </section>
+
         <section id="tab-academicHistory" class="tab-content hidden space-y-6">
           <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex flex-wrap gap-4 items-center justify-between no-print">
             <div class="flex flex-wrap gap-4 items-center">
@@ -2856,6 +2886,8 @@
   <script>
     // TODO: Replace with your actual Supabase project URL and anon/public key
     // once final setup config is ready.
+    // ===== PER-SCHOOL SETTINGS: for a new school, replace ONLY these two values (Supabase > Project Settings > API) =====
+    // Use the "Project URL" and the "anon public" key. NEVER put the service_role key here.
     const SUPABASE_URL = "https://caqdgohnhjgshhjobnxj.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhcWRnb2huaGpnc2hoam9ibnhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1ODI4OTksImV4cCI6MjEwNjE1ODg5OX0.xyjp33JWjo9PyCZ98RDX6ZxK769AFd2dammEK-nSnc0";
 
@@ -3840,6 +3872,7 @@
       // nothing is left showing stale hardcoded placeholder values.
       populateSettingsForm();
       applySystemSettingsEverywhere();
+      dmLoadIndex();
     }
 
     // Persists every piece of app state at once. Called after any action
@@ -4045,7 +4078,7 @@
 
     // Which sidebar tabs each role is allowed to open.
     const ROLE_TABS = {
-      'Admin':           ['dashboard', 'students', 'staff', 'timetable', 'submissions', 'scores', 'attendance', 'reports', 'academicHistory', 'settings'],
+      'Admin':           ['dashboard', 'students', 'staff', 'timetable', 'submissions', 'scores', 'attendance', 'reports', 'academicHistory', 'dataManagement', 'settings'],
       'Class Teacher':   ['dashboard', 'students', 'timetable', 'submissions', 'scores', 'attendance', 'reports', 'academicHistory'],
       'Subject Teacher': ['dashboard', 'students', 'timetable', 'submissions', 'scores'],
       'Parent':          ['reports', 'attendance', 'academicHistory']
@@ -4053,7 +4086,7 @@
     const TAB_LABELS = {
       dashboard: 'Dashboard', students: 'Student Directory', staff: 'Staff Directory',
       timetable: 'Timetable', submissions: 'Notes & Submissions', scores: 'Assessment',
-      attendance: 'Attendance', reports: 'Report Cards', academicHistory: 'Academic History',
+      attendance: 'Attendance', reports: 'Report Cards', academicHistory: 'Academic History', dataManagement: 'Data Management',
       settings: 'Admin Settings'
     };
 
@@ -4808,7 +4841,7 @@
         scores: 'Continuous Assessment & Scores',
         attendance: 'Attendance Management',
         reports: 'Terminal Report Cards',
-        academicHistory: 'Academic History Archive',
+        academicHistory: 'Academic History Archive', dataManagement: 'Data Management',
         settings: currentRole === 'Admin' ? 'Administrator Settings' : 'Academic Setup'
       };
       document.getElementById('page-title').textContent = titles[tabId] || 'Dashboard';
@@ -4820,6 +4853,7 @@
         loadClassTimetableBuilder();
         loadExamTimetableBuilder();
       }
+      if (tabId === 'dataManagement') dmInit();
       if (tabId === 'academicHistory') {
         populateHistoryStudentSelect();
       }
@@ -9026,10 +9060,12 @@
     function getHistoryRecordsForStudent(studentId) {
       return academicHistory
         .filter(r => r.studentId === studentId)
+        .concat((dmArchivedCache[studentId] || []).filter(r => !academicHistory.some(x => x.id === r.id)))
         .sort((a, b) => new Date(b.archivedAt) - new Date(a.archivedAt));
     }
 
     function populateHistoryTermSelect() {
+      dmPrefetchHistory();
       const studentId = document.getElementById('hist-student-select').value;
       const termSelect = document.getElementById('hist-term-select');
       termSelect.innerHTML = '';
@@ -10926,7 +10962,8 @@
       if (!term) return 'No term is set up for this academic year';
       if (!term.locked) return `${term.name} is not locked & archived`;
       const archived = academicHistory.some(r =>
-        r.studentId === s.id && r.academicYear === term.year && r.term === term.name);
+        r.studentId === s.id && r.academicYear === term.year && r.term === term.name)
+        || !!(dmArchivedStudents[term.year + '|' + term.name] && dmArchivedStudents[term.year + '|' + term.name].has(s.id));
       if (!archived) return `No archived report card for ${term.name}`;
       if (studentHasLiveTermData(s.id)) return 'Has scores/attendance/remarks not yet archived';
       return '';
@@ -11101,6 +11138,197 @@
       renderPromotionHistory();
       loadPromotionStudentList();
       refreshAllData();
+    }
+  
+    // ================= DATA MANAGEMENT (Admin) =================
+    // All privileged work (paged export reads, restore writes, archive, guarded cleanup) runs in the
+    // `data-management` Edge Function. This file only ever holds the anon key. Backups are ZIPs the admin saves
+    // wherever they like; nothing here is tied to one storage provider.
+    const DM_TABLES = ['students','staff','classes_streams','subjects','academic_years','terms','submitted_documents','academic_history','promotion_history','class_enrollments','assessment_scores','attendance_records','head_remarks','class_teacher_remarks','report_card_presets','promotion_targets','promoted_to','class_timetables','exam_timetables','system_settings','duty_roster'];
+    const DM_LIMITS = { db: 500 * 1048576, files: 1024 * 1048576 };   // Supabase Free Plan
+    let dmData = null, dmState = { created: null, backupId: null, verifiedFor: null, term: null }, dmBusy = false;
+    let dmArchivedCache = {}, dmFetched = new Set(), dmArchivedStudents = {};
+    const dmEnc = new TextEncoder();
+    const dmFmt = n => n >= 1073741824 ? (n / 1073741824).toFixed(2) + ' GB' : n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB';
+    async function dmCall(action, payload) {
+      const { data: s } = await supabaseClient.auth.getSession();
+      const token = s && s.session && s.session.access_token;
+      if (!token) throw new Error('Your session has expired — please sign in again.');
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/data-management`, { method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
+        body: JSON.stringify(Object.assign({ action }, payload || {})) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Request failed.');
+      return body;
+    }
+    async function dmSha(u8) { return [...new Uint8Array(await crypto.subtle.digest('SHA-256', u8))].map(b => b.toString(16).padStart(2, '0')).join(''); }
+    function dmConcat(parts) { const o = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let i = 0; parts.forEach(p => { o.set(p, i); i += p.length; }); return o; }
+    function dmLog(msg, bad) {
+      const el = document.getElementById('dm-log'); if (!el) return;
+      el.innerHTML += `<div class="${bad ? 'text-red-600' : 'text-slate-600'}">${esc(msg)}</div>`; el.scrollTop = el.scrollHeight;
+    }
+    function dmGuard() {
+      if (currentRole !== 'Admin') { alert('Administrators only.'); return false; }
+      if (!isSupabaseConfigured()) { alert('Data Management needs the Supabase connection.'); return false; }
+      if (dmBusy) { alert('Another Data Management task is running.'); return false; }
+      return true;
+    }
+    async function dmInit() {
+      if (currentRole !== 'Admin' || !isSupabaseConfigured()) return;
+      try { dmData = await dmCall('usage'); } catch (e) { dmLog('Could not load usage: ' + e.message, true); return; }
+      const u = dmData.usage, fileBytes = (u.buckets || []).reduce((n, b) => n + b.bytes, 0), pct = (v, m) => Math.min(100, v / m * 100).toFixed(0);
+      const bar = (label, v, m) => `<div><div class="flex justify-between text-sm"><span>${label}</span><span>${dmFmt(v)} / ${dmFmt(m)} (${pct(v, m)}%)</span></div><div class="h-2 bg-slate-100 rounded"><div class="h-2 rounded ${pct(v, m) > 80 ? 'bg-red-500' : 'bg-brand-600'}" style="width:${pct(v, m)}%"></div></div></div>`;
+      document.getElementById('dm-usage').innerHTML = bar('Database', u.db_bytes, DM_LIMITS.db) + bar('File storage (uploads + term archives)', fileBytes, DM_LIMITS.files) +
+        `<div class="text-xs font-semibold text-slate-500 pt-2">Largest tables</div>` + u.tables.slice(0, 8).map(t => `<div class="flex justify-between text-sm"><span>${esc(t.name)} <span class="text-slate-400">(${t.rows} rows)</span></span><span>${dmFmt(t.bytes)}</span></div>`).join('') +
+        `<div class="text-xs font-semibold text-slate-500 pt-2">Report cards &amp; results by term (live)</div>` + (u.terms.length ? u.terms.map(t => `<div class="flex justify-between text-sm"><span>${esc(t.year)} — ${esc(t.term)} (${t.records})</span><span>${dmFmt(t.bytes)}</span></div>`).join('') : '<div class="text-sm text-slate-400">None in the live database.</div>');
+      document.getElementById('dm-backups').innerHTML = (dmData.backups.length ? dmData.backups.map(b => `<tr class="border-t"><td class="py-1 pr-3">${new Date(b.created_at).toLocaleString()}</td><td class="pr-3">${esc(b.file_name || '')}</td><td class="pr-3">${dmFmt(b.size_bytes || 0)}</td><td class="pr-3">${b.file_count} files</td><td class="${b.status === 'verified' ? 'text-green-600' : 'text-amber-600'}">${esc(b.status)}</td></tr>`).join('') : '<tr><td class="text-slate-400 py-2">No backups yet.</td></tr>');
+      const locked = (terms || []).filter(t => t.locked), live = {}; u.terms.forEach(t => live[t.year + '|' + t.term] = t.records);
+      document.getElementById('dm-term-select').innerHTML = locked.filter(t => live[t.year + '|' + t.name]).map(t => `<option value="${esc(t.year + '|' + t.name)}">${esc(t.year)} — ${esc(t.name)} (${live[t.year + '|' + t.name]} live records)</option>`).join('') || '<option value="">No completed terms with live records</option>';
+      document.getElementById('dm-archived').innerHTML = dmData.archived.map(a => `<div class="flex justify-between items-center text-sm py-1"><span>${esc(a.academic_year)} — ${esc(a.term)} · ${a.records} records · ${dmFmt(a.size_bytes || 0)} compressed</span><button onclick="dmRestoreTerm(${jsArg(a.academic_year)},${jsArg(a.term)})" class="text-brand-700 font-semibold">Restore to live</button></div>`).join('') || '<div class="text-sm text-slate-400">No archived terms yet.</div>';
+    }
+    async function dmCreateBackup() {
+      if (!dmGuard()) return;
+      const name = `TELOS_Backup_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.zip`;
+      let writable = null; const chunks = []; let size = 0, chain = Promise.resolve();
+      if (window.showSaveFilePicker) {   // lets the admin pick any folder or drive: USB, external disk, OneDrive/Dropbox/Drive folders…
+        try { writable = await (await showSaveFilePicker({ suggestedName: name, types: [{ description: 'ZIP backup', accept: { 'application/zip': ['.zip'] } }] })).createWritable(); }
+        catch (e) { if (e.name === 'AbortError') return; writable = null; }
+      }
+      dmBusy = true; dmLog('Backup started…');
+      try {
+        const zip = new fflate.Zip((err, chunk) => { if (err) throw err; size += chunk.length; chain = chain.then(() => writable ? writable.write(chunk) : chunks.push(chunk)); });
+        const add = (path, u8, store) => { const f = store ? new fflate.ZipPassThrough(path) : new fflate.ZipDeflate(path, { level: 6 }); zip.add(f); f.push(u8, true); };
+        const manifest = { format: 'telos-backup', version: 1, created: new Date().toISOString(), tables: {}, files: [] }, termIds = {}, counts = {};
+        for (const t of DM_TABLES) {
+          let part = [], n = 0, total = 0; const parts = [];
+          const flush = async () => { if (!part.length) return; const u8 = dmEnc.encode(JSON.stringify(part)), pn = `data/${t}.${String(++n).padStart(4, '0')}.json`; add(pn, u8); parts.push({ name: pn, rows: part.length, sha256: await dmSha(u8) }); total += part.length; part = []; };
+          for (let p = 0; ; p++) {
+            const { rows } = await dmCall('export_page', { table: t, page: p });
+            rows.forEach(r => { part.push(r); if (t === 'academic_history' && r.data) (termIds[r.data.academicYear + '|' + r.data.term] ||= []).push(r.id); });
+            if (part.length >= 5000) await flush(); if (rows.length < 1000) break;
+          }
+          await flush(); manifest.tables[t] = { rows: total, parts }; counts[t] = total; dmLog(`${t}: ${total} records`);
+        }
+        const digests = {}; for (const k of Object.keys(termIds)) digests[k] = await dmSha(dmEnc.encode(termIds[k].sort().join(',')));
+        manifest.termDigests = digests;
+        let fileBytes = 0;
+        for (let off = 0; ; off += 1000) {
+          const { files } = await dmCall('list_files', { offset: off });
+          for (let i = 0; i < files.length; i += 20) {
+            const batch = files.slice(i, i + 20), { urls } = await dmCall('file_urls', { names: batch.map(f => f.name) });
+            for (const u of urls) {
+              if (!u.signedUrl) throw new Error('Could not read file ' + u.path);
+              const u8 = new Uint8Array(await (await fetch(u.signedUrl)).arrayBuffer());
+              add('files/' + u.path, u8, true); fileBytes += u8.length; manifest.files.push({ name: u.path, size: u8.length, sha256: await dmSha(u8) });
+            }
+            dmLog(`Files: ${manifest.files.length}`);
+          }
+          if (files.length < 1000) break;
+        }
+        add('manifest.json', dmEnc.encode(JSON.stringify(manifest)));
+        zip.end(); await chain;
+        if (writable) await writable.close();
+        else { const blob = new Blob(chunks, { type: 'application/zip' }), a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+          window.dmLastBlob = new File([blob], name, { type: 'application/zip' }); document.getElementById('dm-share').classList.toggle('hidden', !(navigator.canShare && navigator.canShare({ files: [window.dmLastBlob] }))); }
+        counts.__created = manifest.created;
+        const reg = await dmCall('register_backup', { file_name: name, size_bytes: size, row_counts: counts, term_digests: digests, file_count: manifest.files.length, file_bytes: fileBytes });
+        dmState.created = manifest.created; dmState.backupId = reg.id;
+        dmLog(`Backup complete (${dmFmt(size)}). Next: verify the saved file (step 2).`);
+      } catch (e) { dmLog('Backup failed: ' + e.message, true); try { if (writable) await writable.abort(); } catch (x) {} }
+      dmBusy = false; dmInit();
+    }
+    function dmShareBackup() { navigator.share({ files: [window.dmLastBlob], title: 'TELOS backup' }).catch(() => {}); }   // Drive / OneDrive / Dropbox / any installed app
+    // Streams a ZIP from disk entry by entry (never the whole archive in memory).
+    function dmReadZip(file, onEntry) {
+      return new Promise((resolve, reject) => {
+        const un = new fflate.Unzip(); un.register(fflate.UnzipInflate); un.register(fflate.UnzipPassThrough); let chain = Promise.resolve();
+        un.onfile = f => { const parts = []; f.ondata = (e, d, fin) => { if (e) return reject(e); parts.push(d); if (fin) { const u8 = dmConcat(parts); chain = chain.then(() => onEntry(f.name, u8)); chain.catch(reject); } }; f.start(); };
+        (async () => { try { const C = 4194304; for (let o = 0; o < file.size; o += C) un.push(new Uint8Array(await file.slice(o, o + C).arrayBuffer()), o + C >= file.size); await chain; resolve(); } catch (e) { reject(e); } })();
+      });
+    }
+    async function dmValidate(file) {   // checksum every entry against manifest.json
+      const seen = {}; let manifest = null;
+      await dmReadZip(file, async (name, u8) => { if (name === 'manifest.json') manifest = JSON.parse(new TextDecoder().decode(u8)); else seen[name] = await dmSha(u8); });
+      const problems = [];
+      if (!manifest || manifest.format !== 'telos-backup') problems.push('manifest.json is missing or not a TELOS backup.');
+      else {
+        for (const [t, info] of Object.entries(manifest.tables)) { info.parts.forEach(p => { if (seen[p.name] !== p.sha256) problems.push(`${p.name} is missing or damaged`); }); }
+        manifest.files.forEach(f => { if (seen['files/' + f.name] !== f.sha256) problems.push(`file ${f.name} is missing or damaged`); });
+      }
+      return { manifest, problems };
+    }
+    async function dmVerifyBackup(input) {
+      const file = input.files[0]; input.value = ''; if (!file || !dmGuard()) return;
+      dmBusy = true; dmLog('Verifying ' + file.name + '…');
+      try {
+        const { manifest, problems } = await dmValidate(file);
+        if (problems.length) { dmLog('NOT VERIFIED: ' + problems.slice(0, 5).join('; '), true); }
+        else {
+          const row = dmData && dmData.backups.find(b => b.row_counts && b.row_counts.__created === manifest.created);
+          if (!row) dmLog('The file is intact, but it does not match a backup created here. Create a new backup.', true);
+          else { await dmCall('mark_verified', { backup_id: row.id }); dmState.backupId = row.id; dmLog('Backup verified: every entry matches its checksum.'); }
+        }
+      } catch (e) { dmLog('Verification failed: ' + e.message, true); }
+      dmBusy = false; dmInit();
+    }
+    async function dmRestoreBackup(input) {
+      const file = input.files[0]; input.value = ''; if (!file || !dmGuard()) return;
+      dmBusy = true; dmLog('Validating ' + file.name + ' before restoring…');
+      try {
+        const { manifest, problems } = await dmValidate(file);
+        if (problems.length) throw new Error('Backup failed validation: ' + problems.slice(0, 5).join('; '));
+        const total = Object.values(manifest.tables).reduce((n, t) => n + t.rows, 0);
+        if (prompt(`Backup is valid (${total} records, ${manifest.files.length} files, made ${manifest.created}).\nRestoring merges them into the live database using the ORIGINAL record IDs. Nothing is deleted, but matching records are overwritten.\n\nType RESTORE to continue.`) !== 'RESTORE') { dmLog('Restore cancelled.'); dmBusy = false; return; }
+        let n = 0;
+        await dmReadZip(file, async (name, u8) => {
+          if (name.startsWith('data/')) {
+            const table = name.split('/')[1].split('.')[0], rows = JSON.parse(new TextDecoder().decode(u8));
+            for (let i = 0; i < rows.length; i += 400) await dmCall('restore_chunk', { table, rows: rows.slice(i, i + 400) });
+            n += rows.length; dmLog(`${table}: restored ${rows.length}`);
+          } else if (name.startsWith('files/')) {
+            const id = name.slice(6), ext = (id.split('.').pop() || '').toLowerCase();
+            const { error } = await supabaseClient.storage.from(SUBMISSIONS_BUCKET).upload(id, new Blob([u8]), { contentType: SUBMISSION_MIME[ext] || 'application/octet-stream', upsert: true });
+            if (error) throw error;
+          }
+        });
+        await loadAllState(); refreshAllData(); dmLog(`Restore complete: ${n} records.`);
+      } catch (e) { dmLog('Restore stopped: ' + e.message, true); }
+      dmBusy = false; dmInit();
+    }
+    async function dmRunCleanup() {
+      if (!dmGuard()) return;
+      const v = document.getElementById('dm-term-select').value; if (!v) return alert('Choose a completed term first.');
+      if (!dmState.backupId) return alert('Create a backup (step 1) and verify the saved file (step 2) first.');
+      const [year, term] = v.split('|');
+      if (!confirm(`Remove ${year} — ${term} report cards/results from the LIVE database?\nStudent and staff records are kept. The term stays viewable in Academic History and can be restored.`)) return;
+      dmBusy = true;
+      try {
+        dmLog('Creating the compressed server archive and checking it…'); const a = await dmCall('archive_term', { year, term });
+        dmLog(`Archived ${a.records} records (${dmFmt(a.bytes)}). Removing from live database…`);
+        const r = await dmCall('cleanup_term', { year, term, backup_id: dmState.backupId });
+        academicHistory = await loadCollection('academicHistory', []); dmArchivedCache = {}; dmFetched.clear(); await dmLoadIndex();
+        dmLog(`Done: ${r.deleted} records removed from the live database.`); dmState.backupId = null;
+      } catch (e) { dmLog('Cleanup refused: ' + e.message, true); }
+      dmBusy = false; dmInit();
+    }
+    async function dmRestoreTerm(year, term) {
+      if (!dmGuard() || !confirm(`Restore ${year} — ${term} to the live database?`)) return;
+      dmBusy = true;
+      try { const r = await dmCall('restore_term', { year, term }); academicHistory = await loadCollection('academicHistory', []); dmLog(`Restored ${r.restored} records.`); }
+      catch (e) { dmLog('Restore failed: ' + e.message, true); }
+      dmBusy = false; dmInit();
+    }
+    // ---- Academic History integration: terms removed from the live DB are served from the server archive ----
+    async function dmLoadIndex() {
+      if (!isSupabaseConfigured()) return;
+      try { const r = await dmCall('history_index'); dmArchivedStudents = {}; r.terms.forEach(t => { dmArchivedStudents[t.year + '|' + t.term] = new Set(t.students || []); }); } catch (e) { /* not signed in yet */ }
+    }
+    async function dmPrefetchHistory() {
+      const sel = document.getElementById('hist-student-select'), id = sel && sel.value;
+      if (!id || dmFetched.has(id) || !isSupabaseConfigured()) return;
+      dmFetched.add(id);
+      try { const r = await dmCall('history_get', { student_id: id }); dmArchivedCache[id] = r.records || []; if (dmArchivedCache[id].length) populateHistoryTermSelect(); }
+      catch (e) { dmFetched.delete(id); }
     }
   </script>
 </body>
