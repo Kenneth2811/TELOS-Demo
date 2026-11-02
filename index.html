@@ -1503,6 +1503,10 @@
               <label class="px-4 py-2 rounded-lg bg-amber-100 text-amber-800 text-sm font-semibold cursor-pointer">Restore from backup<input type="file" accept=".zip" class="hidden" onchange="dmRestoreBackup(this)"></label>
               <button id="dm-share" onclick="dmShareBackup()" class="hidden px-4 py-2 rounded-lg bg-slate-100 text-sm font-semibold">Send to another app…</button>
             </div>
+            <div class="flex flex-wrap items-center gap-3 bg-brand-50/60 border border-brand-100 rounded-xl p-3">
+              <div class="flex-1 min-w-[200px]"><div class="text-sm font-bold text-slate-800">Offline Archive Viewer</div><div class="text-xs text-slate-500">Open your saved backup ZIPs on a computer without internet: report cards, students, staff and files. Install it once from the page that opens.</div></div>
+              <button onclick="openViewerSite()" class="px-4 py-2 rounded-lg bg-white border border-brand-200 text-brand-700 text-sm font-semibold">Get the Offline Viewer</button>
+            </div>
             <table class="text-sm w-full"><tbody id="dm-backups"></tbody></table>
           </div>
           <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">
@@ -2888,6 +2892,8 @@
     // PER-SCHOOL: set SCHOOL_ID to this school's ID exactly as written in your license sheet. LICENSE_URL is the SAME for every school.
     const SCHOOL_ID = "D11";
     const LICENSE_URL = "https://script.google.com/macros/s/AKfycbxHOTTaM2bvI1jKvCSb6PmvukjVftqFwi9LCCFnRXw7ctRPszhyWP7sPyMZtEgyemNqNQ/exec";
+    // Address of YOUR viewer website's viewer page (same for every school). Use the viewer.html page, NOT the home page.
+    const VIEWER_URL = "https://kenneth2811.github.io/TELOS-Offline_Archive_Viewer/viewer.html";
     const LICENSE_CONTACT = "MaceInk Technologies · +233 (0) 54 555 3048";
     const LICENSE_GRACE_DAYS = 7;   // keeps working this long if the license server cannot be reached
     const LICENSE_WARN_DAYS = 14;   // show a renewal notice this many days before expiry
@@ -11287,6 +11293,10 @@
         dmLog(`Backup complete (${dmFmt(size)}). Next: verify the saved file (step 2).`);
       } catch (e) { dmLog('Backup failed: ' + e.message, true); try { if (writable) await writable.abort(); } catch (x) {} }
       dmBusy = false; dmInit();
+    }
+    function openViewerSite() {   // opens the viewer page directly (never the marketing home page)
+      if (!VIEWER_URL || VIEWER_URL.indexOf('yourcompany') >= 0) { alert('The viewer address has not been set yet. Ask your TELOS provider.'); return; }
+      window.open(VIEWER_URL, '_blank', 'noopener');
     }
     function dmShareBackup() { navigator.share({ files: [window.dmLastBlob], title: 'TELOS backup' }).catch(() => {}); }   // Drive / OneDrive / Dropbox / any installed app
     // Streams a ZIP from disk entry by entry (never the whole archive in memory).
