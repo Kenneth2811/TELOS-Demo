@@ -2883,10 +2883,61 @@
   </div>
 
   <!-- ================= SECTION: SUPABASE CONFIG (PLACEHOLDER) ================= -->
+  <!-- ================= SECTION: LICENSE CHECK (MaceInk) ================= -->
+  <script>
+    // PER-SCHOOL: set SCHOOL_ID to this school's ID exactly as written in your license sheet. LICENSE_URL is the SAME for every school.
+    const SCHOOL_ID = "SCHOOL-001";
+    const LICENSE_URL = "https://script.google.com/macros/s/AKfycbxHOTTaM2bvI1jKvCSb6PmvukjVftqFwi9LCCFnRXw7ctRPszhyWP7sPyMZtEgyemNqNQ/exec";
+    const LICENSE_CONTACT = "MaceInk Technologies · +233 (0) 54 555 3048";
+    const LICENSE_GRACE_DAYS = 7;   // keeps working this long if the license server cannot be reached
+    const LICENSE_WARN_DAYS = 14;   // show a renewal notice this many days before expiry
+    (function () {
+      const KEY = 'telos_license_v1', DAY = 864e5;
+      function lock(title, msg, retry) {
+        let o = document.getElementById('lic-lock');
+        if (!o) { o = document.createElement('div'); o.id = 'lic-lock';
+          o.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#1e1b4b;color:#fff;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font-family:system-ui,Segoe UI,Arial,sans-serif';
+          document.body.appendChild(o); }
+        o.innerHTML = '<div style="max-width:460px"><div style="font-size:46px">&#128274;</div><h1 style="font-size:24px;margin:8px 0">' + title + '</h1><p style="opacity:.85;line-height:1.5">' + msg + '</p><p style="margin-top:14px;font-weight:700">' + LICENSE_CONTACT + '</p>' +
+          (retry ? '<button onclick="location.reload()" style="margin-top:14px;padding:10px 22px;border:0;border-radius:10px;font-weight:700;cursor:pointer">Try again</button>' : '') + '</div>';
+        document.documentElement.style.overflow = 'hidden';
+      }
+      function clear() { ['lic-lock', 'lic-warn'].forEach(i => { const o = document.getElementById(i); if (o) o.remove(); }); document.documentElement.style.overflow = ''; }
+      function warn(t) {
+        const o = document.createElement('div'); o.id = 'lic-warn';
+        o.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:2147483000;background:#f59e0b;color:#1e1b4b;text-align:center;padding:6px 10px;font:600 13px system-ui,Arial';
+        o.textContent = t; document.body.appendChild(o);
+      }
+      async function check() {
+        if (!LICENSE_URL || LICENSE_URL.indexOf('PASTE') === 0) return;   // not configured yet (set it up before handing over)
+        let r = null;
+        try {
+          const res = await fetch(LICENSE_URL + '?id=' + encodeURIComponent(SCHOOL_ID) + '&domain=' + encodeURIComponent(location.hostname), { cache: 'no-store' });
+          r = await res.json();
+          try { localStorage.setItem(KEY, JSON.stringify({ r: r, t: Date.now() })); } catch (e) {}
+        } catch (e) {
+          let c = null; try { c = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (x) {}
+          if (c && c.r && c.r.status === 'valid' && Date.now() - c.t < LICENSE_GRACE_DAYS * DAY && (!c.r.expiry || new Date(c.r.expiry) > new Date())) r = c.r;
+          else { lock('Cannot verify licence', 'Please connect to the internet and try again.', true); return; }
+        }
+        clear();
+        if (r.status === 'valid') { if (r.daysLeft <= LICENSE_WARN_DAYS) warn('Your TELOS subscription expires in ' + Math.max(r.daysLeft, 0) + ' day(s). Please renew: ' + LICENSE_CONTACT); return; }
+        const m = { expired: ['Subscription expired', 'Your TELOS subscription has ended. Please renew to continue.'],
+          suspended: ['Account suspended', 'This school account is currently suspended.'],
+          wrongdomain: ['Not authorised here', 'This copy of TELOS is not licensed for this website address.'],
+          unknown: ['School not registered', 'This school is not registered. Please contact us.'] }[r.status] || ['Licence problem', 'Please contact us.'];
+        lock(m[0], m[1], false);
+      }
+      window.addEventListener('DOMContentLoaded', check);
+      setInterval(check, 6 * 60 * 60 * 1000);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) { try { const c = JSON.parse(localStorage.getItem(KEY) || 'null'); if (!c || Date.now() - c.t > 6 * 60 * 60 * 1000) check(); } catch (e) { check(); } } });
+    })();
+  </script>
+
   <script>
     // TODO: Replace with your actual Supabase project URL and anon/public key
     // once final setup config is ready.
-    // ===== PER-SCHOOL SETTINGS: for a new school, replace ONLY these two values (Supabase > Project Settings > API) =====
+    // ===== PER-SCHOOL SETTINGS: for a new school, replace these two values (Supabase > Project Settings > API) AND SCHOOL_ID in the LICENSE CHECK block above =====
     // Use the "Project URL" and the "anon public" key. NEVER put the service_role key here.
     const SUPABASE_URL = "https://caqdgohnhjgshhjobnxj.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhcWRnb2huaGpnc2hoam9ibnhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1ODI4OTksImV4cCI6MjEwNjE1ODg5OX0.xyjp33JWjo9PyCZ98RDX6ZxK769AFd2dammEK-nSnc0";
