@@ -1695,7 +1695,7 @@
               <div class="flex justify-between items-center">
                 <div>
                   <h4 class="font-bold text-sm text-brand-900">Terms Setup</h4>
-                  <p class="text-[11px] text-slate-500">When a term ends, click <span class="font-bold">Lock &amp; Archive</span> to snapshot every student's scores, attendance and remarks into <span class="font-bold">Academic History</span> and clear the score sheet for the next term. This cannot be undone. Once locked, a term can be <span class="font-bold">Hidden</span> from this list to keep it tidy -- its Academic History snapshot stays intact either way, and hidden terms can be brought back with "Show hidden terms".</p>
+                  <p class="text-[11px] text-slate-500">When a term ends, click <span class="font-bold">Lock &amp; Archive</span> to snapshot every student's scores, attendance and remarks into <span class="font-bold">Academic History</span> and clear the score sheet for the next term. This cannot be undone. Once locked, a term can be <span class="font-bold">Hidden</span> from this list to keep it tidy -- its Academic History snapshot stays intact either way, and hidden terms can be brought back with "Show hidden terms". A locked term can also be <span class="font-bold text-red-600">Deleted</span> for good (Administrator password + typed confirmation required): the term is removed from this list and its Academic History is erased for every student. This cannot be undone.</p>
                 </div>
                 <div class="flex items-center gap-3 shrink-0">
                   <label class="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500 cursor-pointer whitespace-nowrap">
@@ -2723,6 +2723,56 @@
           <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 cursor-pointer">Save Term</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal: Permanently delete an archived (locked) term — double authentication -->
+  <div id="delete-term-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 max-h-[92vh] overflow-y-auto">
+      <div class="flex items-start gap-3">
+        <div class="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0"><i data-lucide="trash-2" class="w-5 h-5"></i></div>
+        <div>
+          <h3 class="text-lg font-bold text-red-700">Permanently delete archived term</h3>
+          <p class="text-[11px] text-slate-500">Two confirmations are required: your password, then the term name.</p>
+        </div>
+      </div>
+
+      <div id="delterm-summary" class="text-xs text-slate-700 bg-red-50 border border-red-200 rounded-lg p-3 space-y-1"></div>
+
+      <div id="delterm-blocked" class="hidden text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded-lg p-3 space-y-1"></div>
+
+      <div id="delterm-auth" class="space-y-4">
+        <!-- Confirmation 1: re-enter the signed-in administrator's password -->
+        <form id="delterm-step1" onsubmit="event.preventDefault(); delTermVerifyPassword();" autocomplete="off" class="border rounded-lg p-3 space-y-2">
+          <div class="flex items-center justify-between">
+            <label for="delterm-pw" class="block text-xs font-bold text-slate-600 uppercase">1. Confirm your password</label>
+            <span id="delterm-step1-badge" class="hidden text-[11px] font-bold text-emerald-600 inline-flex items-center gap-1"><i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Verified</span>
+          </div>
+          <div class="relative">
+            <input type="password" id="delterm-pw" autocomplete="off" placeholder="Your administrator password" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 pr-11 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/30">
+            <button type="button" onmousedown="event.preventDefault()" onclick="togglePasswordVisibility('delterm-pw', this)" class="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-brand-600 focus:outline-none focus-visible:text-brand-600 transition-colors" aria-label="Show password" aria-pressed="false" title="Show password">
+            <svg class="pw-eye w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="pw-eye-off hidden w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+          </button>
+          </div>
+          <div class="flex items-center gap-3">
+            <button type="submit" id="delterm-verify-btn" class="px-3 py-1.5 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-900 cursor-pointer">Verify password</button>
+            <span id="delterm-pw-msg" class="text-[11px] text-slate-500"></span>
+          </div>
+        </form>
+
+        <!-- Confirmation 2: type the term's name and year -->
+        <div id="delterm-step2" class="border rounded-lg p-3 space-y-2 opacity-50">
+          <label for="delterm-phrase" class="block text-xs font-bold text-slate-600 uppercase">2. Type the term name to confirm</label>
+          <p class="text-[11px] text-slate-500">Type <span id="delterm-phrase-label" class="font-mono font-bold text-red-700"></span> exactly to unlock deletion.</p>
+          <input type="text" id="delterm-phrase" oninput="delTermRefreshUI()" disabled autocomplete="off" spellcheck="false" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-600/30">
+        </div>
+      </div>
+
+      <div class="flex justify-end space-x-2 pt-4 border-t">
+        <button type="button" onclick="closeDeleteTermModal()" class="px-4 py-2 border rounded-lg text-sm font-semibold cursor-pointer">Cancel</button>
+        <button type="button" id="delterm-confirm-btn" onclick="confirmDeleteTerm()" disabled class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Delete permanently</button>
+      </div>
     </div>
   </div>
 
@@ -9489,6 +9539,218 @@
       renderTermsTable();
     }
 
+    // ================= DELETE AN ARCHIVED TERM (Admin only, double authentication) =================
+    // Permanently removes a locked & archived term from Terms Setup AND erases that term's Academic
+    // History snapshot (scores, attendance, remarks, report-card data) for every student.
+    // Because it cannot be undone, it needs two separate confirmations:
+    //   1) the signed-in Administrator re-enters their OWN password (checked again here, not just at login);
+    //   2) they type the term's name and year exactly.
+    // Students themselves, promotion history, class enrolments and every other term are never touched.
+    const DELTERM_VERIFY_TTL = 5 * 60 * 1000;   // a verified password is only good for 5 minutes
+    const DELTERM_MAX_FAILS = 3, DELTERM_LOCK_MS = 60 * 1000;
+    let delTermCtx = null, delTermFails = 0, delTermLockUntil = 0;
+
+    function delTermPhrase(t) { return `${t.name} ${t.year}`; }
+    function delTermNorm(s) { return String(s || '').trim().replace(/\s+/g, ' ').toLowerCase(); }
+    function delTermMatch(t) { return r => !!r && r.academicYear === t.year && r.term === t.name; }
+
+    // Checks the password of the account that is signed in right now (never another account).
+    async function verifyCurrentAdminPassword(password) {
+      if (currentRole !== 'Admin') return { ok: false, error: 'Only an Administrator can do this.' };
+      const email = String(currentUser || '').trim();
+      if (!email) return { ok: false, error: 'Could not identify the signed-in account. Please sign out and sign in again.' };
+
+      if (isSupabaseConfigured()) {
+        if (!window.supabase) return { ok: false, transient: true, error: 'Could not reach the sign-in service. Check your internet connection.' };
+        let tmp = null;
+        try {
+          // A throw-away client with no stored session, so checking the password never disturbs the real login.
+          tmp = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'telos-reauth-check' }
+          });
+          const { data, error } = await tmp.auth.signInWithPassword({ email, password });
+          if (error || !data || !data.user) {
+            const m = (error && error.message) || '';
+            if (!error || error.status === 400 || /invalid|credentials/i.test(m)) return { ok: false, error: 'Incorrect password.' };
+            return { ok: false, transient: true, error: 'Could not verify the password right now: ' + m };
+          }
+          // It must be the same account that is signed in to this session.
+          const { data: s } = await supabaseClient.auth.getSession();
+          const mainId = s && s.session && s.session.user && s.session.user.id;
+          if (mainId && data.user.id !== mainId) return { ok: false, error: 'That password belongs to a different account.' };
+          return { ok: true };
+        } catch (e) {
+          return { ok: false, transient: true, error: 'Could not verify the password right now. Check your internet connection and try again.' };
+        } finally {
+          try { if (tmp) await tmp.auth.signOut({ scope: 'local' }); } catch (e) { /* only ends the throw-away session */ }
+        }
+      }
+
+      // Local-testing mode: same rules as login.
+      const key = email.toLowerCase();
+      const user = systemUsers.find(u => (u.email || '').trim().toLowerCase() === key);
+      if (user) {
+        if (!user.passHash || !user.salt) return { ok: false, error: 'This account has no password set.' };
+        return hashPassword(password, user.salt) === user.passHash ? { ok: true } : { ok: false, error: 'Incorrect password.' };
+      }
+      const demo = DEMO_ACCOUNTS[key];
+      if (demo && !hasRealAdminUser() && password === demo.password) return { ok: true };
+      return { ok: false, error: 'Incorrect password.' };
+    }
+
+    function delTermIsVerified() {
+      return !!(delTermCtx && delTermCtx.verifiedAt && (Date.now() - delTermCtx.verifiedAt) <= DELTERM_VERIFY_TTL);
+    }
+
+    // Single place that keeps every control in the dialog in step with the current state.
+    function delTermRefreshUI(pwMessage, pwMessageIsGood) {
+      if (!delTermCtx) return;
+      let expiredNote = '';
+      if (delTermCtx.verifiedAt && !delTermIsVerified()) { delTermCtx.verifiedAt = 0; expiredNote = 'Verification expired. Enter your password again.'; }
+      const verified = delTermIsVerified();
+      const blocked = !!delTermCtx.blockedReason;
+      const phraseEl = document.getElementById('delterm-phrase');
+      const typedOk = verified && delTermNorm(phraseEl.value) === delTermNorm(delTermPhrase(delTermCtx.term));
+
+      document.getElementById('delterm-auth').classList.toggle('hidden', blocked);
+      document.getElementById('delterm-step1-badge').classList.toggle('hidden', !verified);
+      document.getElementById('delterm-step2').classList.toggle('opacity-50', !verified);
+      phraseEl.disabled = !verified;
+      if (!verified) phraseEl.value = '';
+      document.getElementById('delterm-confirm-btn').disabled = blocked || !typedOk;
+
+      const locked = Date.now() < delTermLockUntil;
+      const pwEl = document.getElementById('delterm-pw'), verifyBtn = document.getElementById('delterm-verify-btn');
+      pwEl.disabled = verified || locked;
+      verifyBtn.disabled = verified || locked;
+      if (locked) pwMessage = 'Too many incorrect attempts. Try again in a minute.';
+      const msgEl = document.getElementById('delterm-pw-msg');
+      const text = pwMessage || expiredNote || (verified ? 'Password confirmed. Now complete step 2.' : '');
+      msgEl.textContent = text;
+      msgEl.className = 'text-[11px] ' + ((pwMessageIsGood || (verified && !pwMessage)) ? 'text-emerald-600' : (text ? 'text-red-600 font-semibold' : 'text-slate-500'));
+    }
+
+    async function openDeleteTermModal(idx) {
+      if (currentRole !== 'Admin') { alert('Only an Administrator can delete a term.'); return; }
+      const t = terms[idx];
+      if (!t) return;
+      if (!t.locked) { alert('Only a locked & archived term can be deleted here. Use "Delete" next to an open term instead.'); return; }
+
+      // Refresh what is stored in the server-side archive (terms moved out of the live database by Data Management).
+      if (isSupabaseConfigured() && typeof dmLoadIndex === 'function') { try { await dmLoadIndex(); } catch (e) { /* not available: nothing archived there */ } }
+
+      const recs = academicHistory.filter(delTermMatch(t));
+      const students = new Set(recs.map(r => r.studentId)).size;
+      let serverStudents = 0;
+      try { const set = dmArchivedStudents[t.year + '|' + t.name]; serverStudents = set ? set.size : 0; } catch (e) { serverStudents = 0; }
+
+      delTermCtx = { term: t, records: recs.length, students, verifiedAt: 0, blockedReason: '' };
+
+      document.getElementById('delterm-summary').innerHTML =
+        `<div class="font-bold text-red-700 text-sm">${esc(t.name)} &mdash; ${esc(t.year)}</div>` +
+        `<div>This will permanently erase <span class="font-bold">${recs.length}</span> archived student record${recs.length === 1 ? '' : 's'}` +
+        ` (<span class="font-bold">${students}</span> student${students === 1 ? '' : 's'}) for this term: scores, attendance, conduct, interest and remarks, and the archived report cards built from them.</div>` +
+        `<div>The term is then removed from Terms Setup. Students, other terms, promotion history and class enrolments are not affected.</div>` +
+        `<div class="font-bold text-red-700">This cannot be undone. Download a backup first if you may need this data again.</div>`;
+
+      const blockedEl = document.getElementById('delterm-blocked');
+      if (serverStudents > 0) {
+        delTermCtx.blockedReason = 'server-archive';
+        blockedEl.innerHTML =
+          `<div class="font-bold">This term cannot be deleted from here yet.</div>` +
+          `<div>${serverStudents} student record${serverStudents === 1 ? '' : 's'} for this term ${serverStudents === 1 ? 'is' : 'are'} stored in the server archive created by Data Management (&ldquo;Archive &amp; remove from live database&rdquo;). ` +
+          `Deleting the term here would leave that archived copy behind, and it would reappear in Academic History.</div>`;
+        blockedEl.classList.remove('hidden');
+      } else {
+        blockedEl.classList.add('hidden');
+        blockedEl.innerHTML = '';
+      }
+
+      document.getElementById('delterm-pw').value = '';
+      document.getElementById('delterm-phrase').value = '';
+      document.getElementById('delterm-phrase-label').textContent = delTermPhrase(t);
+      resetPasswordVisibility('delterm-pw');
+      document.getElementById('delete-term-modal').classList.remove('hidden');
+      delTermRefreshUI();
+      if (window.lucide) lucide.createIcons();
+      if (!delTermCtx.blockedReason) { const pw = document.getElementById('delterm-pw'); if (pw && !pw.disabled) pw.focus(); }
+    }
+
+    function closeDeleteTermModal() {
+      delTermCtx = null;
+      const pw = document.getElementById('delterm-pw'), ph = document.getElementById('delterm-phrase');
+      if (pw) pw.value = '';
+      if (ph) ph.value = '';
+      resetPasswordVisibility('delterm-pw');
+      document.getElementById('delete-term-modal').classList.add('hidden');
+    }
+
+    // Confirmation 1.
+    async function delTermVerifyPassword() {
+      if (!delTermCtx || delTermCtx.blockedReason) return;
+      if (Date.now() < delTermLockUntil) { delTermRefreshUI(); return; }
+      const pwEl = document.getElementById('delterm-pw'), btn = document.getElementById('delterm-verify-btn');
+      const pw = pwEl.value;
+      if (!pw) { delTermRefreshUI('Enter your password.'); return; }
+      btn.disabled = true; btn.textContent = 'Checking…';
+      let res;
+      try { res = await verifyCurrentAdminPassword(pw); }
+      catch (e) { res = { ok: false, transient: true, error: 'Could not verify the password right now.' }; }
+      btn.textContent = 'Verify password';
+      if (!delTermCtx) return;           // dialog was closed while checking
+      pwEl.value = '';
+      if (res.ok) {
+        delTermFails = 0;
+        delTermCtx.verifiedAt = Date.now();
+        delTermRefreshUI();
+        const ph = document.getElementById('delterm-phrase'); if (ph && !ph.disabled) ph.focus();
+        return;
+      }
+      if (res.transient) { delTermRefreshUI(res.error); return; }
+      delTermFails++;
+      if (delTermFails >= DELTERM_MAX_FAILS) {
+        delTermFails = 0;
+        delTermLockUntil = Date.now() + DELTERM_LOCK_MS;
+        delTermRefreshUI();
+        setTimeout(() => { if (delTermCtx) delTermRefreshUI(); }, DELTERM_LOCK_MS + 100);
+      } else {
+        delTermRefreshUI(`Incorrect password. ${DELTERM_MAX_FAILS - delTermFails} attempt${DELTERM_MAX_FAILS - delTermFails === 1 ? '' : 's'} left.`);
+      }
+    }
+
+    // Does the actual removal. Returns how many archived student records were erased.
+    function performTermDeletion(term) {
+      const match = delTermMatch(term);
+      const before = academicHistory.length;
+      academicHistory = academicHistory.filter(r => !match(r));
+      const removed = before - academicHistory.length;
+      // Anything cached in this browser from the server archive, so nothing reappears on screen.
+      try {
+        Object.keys(dmArchivedCache).forEach(sid => { dmArchivedCache[sid] = (dmArchivedCache[sid] || []).filter(r => !match(r)); });
+        delete dmArchivedStudents[term.year + '|' + term.name];
+      } catch (e) { /* Data Management not in use */ }
+      const i = terms.indexOf(term);
+      if (i >= 0) terms.splice(i, 1);
+      refreshAllData();     // re-draws every list and saves terms + academicHistory (deleting the rows in Supabase too)
+      try { populateHistoryStudentSelect(); } catch (e) { /* Academic History tab not drawn yet */ }
+      return removed;
+    }
+
+    // Confirmation 2 + the final, re-checked delete.
+    function confirmDeleteTerm() {
+      if (currentRole !== 'Admin') { alert('Only an Administrator can delete a term.'); return; }
+      if (!delTermCtx || delTermCtx.blockedReason) return;
+      if (!delTermIsVerified()) { delTermRefreshUI(); alert('Your password confirmation has expired. Please verify it again.'); return; }
+      const t = delTermCtx.term;
+      if (delTermNorm(document.getElementById('delterm-phrase').value) !== delTermNorm(delTermPhrase(t))) { delTermRefreshUI(); return; }
+      if (!t.locked || terms.indexOf(t) < 0) { closeDeleteTermModal(); alert('This term no longer exists or is no longer locked.'); return; }
+
+      const label = `${t.name} (${t.year})`;
+      const removed = performTermDeletion(t);
+      closeDeleteTermModal();
+      alert(`${label} has been permanently deleted.\n${removed} archived student record${removed === 1 ? '' : 's'} removed from Academic History.`);
+    }
+
     function renderTermsTable() {
       const tbody = document.getElementById('terms-table-body');
       tbody.innerHTML = '';
@@ -9508,9 +9770,11 @@
           : `<button onclick="lockAndArchiveTerm(${idx})" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-2.5 py-1 rounded text-[11px] cursor-pointer inline-flex items-center gap-1"><i data-lucide="archive" class="w-3 h-3"></i> Lock & Archive</button>`;
         const isActive = t.status === 'Active' && !t.locked;
         const deleteCell = t.locked
-          ? (t.hidden
+          ? `<span class="space-x-3 whitespace-nowrap">${t.hidden
               ? `<button onclick="unhideTerm(${idx})" class="text-brand-600 font-bold text-xs hover:text-brand-700 cursor-pointer">Unhide</button>`
-              : `<button onclick="hideTerm(${idx})" class="text-slate-400 font-bold text-xs hover:text-slate-600 cursor-pointer">Hide</button>`)
+              : `<button onclick="hideTerm(${idx})" class="text-slate-400 font-bold text-xs hover:text-slate-600 cursor-pointer">Hide</button>`}${currentRole === 'Admin'
+              ? `<button onclick="openDeleteTermModal(${idx})" class="text-red-500 font-bold text-xs hover:text-red-700 cursor-pointer">Delete</button>`
+              : ''}</span>`
           : `<span class="space-x-3 whitespace-nowrap">${isActive
               ? '<span class="text-[11px] text-emerald-600 font-bold">Current</span>'
               : `<button onclick="setActiveTerm(${idx})" class="text-brand-600 font-bold text-xs hover:text-brand-700 cursor-pointer">Set Active</button>`}
