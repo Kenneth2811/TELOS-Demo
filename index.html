@@ -9644,22 +9644,22 @@
       let serverStudents = 0;
       try { const set = dmArchivedStudents[t.year + '|' + t.name]; serverStudents = set ? set.size : 0; } catch (e) { serverStudents = 0; }
 
-      delTermCtx = { term: t, records: recs.length, students, verifiedAt: 0, blockedReason: '' };
+      const recordsShown = Math.max(recs.length, serverStudents), studentsShown = Math.max(students, serverStudents);
+      delTermCtx = { term: t, records: recordsShown, students: studentsShown, verifiedAt: 0, blockedReason: '', serverArchived: serverStudents > 0 };
 
       document.getElementById('delterm-summary').innerHTML =
         `<div class="font-bold text-red-700 text-sm">${esc(t.name)} &mdash; ${esc(t.year)}</div>` +
-        `<div>This will permanently erase <span class="font-bold">${recs.length}</span> archived student record${recs.length === 1 ? '' : 's'}` +
-        ` (<span class="font-bold">${students}</span> student${students === 1 ? '' : 's'}) for this term: scores, attendance, conduct, interest and remarks, and the archived report cards built from them.</div>` +
+        `<div>This will permanently erase <span class="font-bold">${recordsShown}</span> archived student record${recordsShown === 1 ? '' : 's'}` +
+        ` (<span class="font-bold">${studentsShown}</span> student${studentsShown === 1 ? '' : 's'}) for this term: scores, attendance, conduct, interest and remarks, and the archived report cards built from them.</div>` +
         `<div>The term is then removed from Terms Setup. Students, other terms, promotion history and class enrolments are not affected.</div>` +
         `<div class="font-bold text-red-700">This cannot be undone. Download a backup first if you may need this data again.</div>`;
 
       const blockedEl = document.getElementById('delterm-blocked');
       if (serverStudents > 0) {
-        delTermCtx.blockedReason = 'server-archive';
         blockedEl.innerHTML =
-          `<div class="font-bold">This term cannot be deleted from here yet.</div>` +
-          `<div>${serverStudents} student record${serverStudents === 1 ? '' : 's'} for this term ${serverStudents === 1 ? 'is' : 'are'} stored in the server archive created by Data Management (&ldquo;Archive &amp; remove from live database&rdquo;). ` +
-          `Deleting the term here would leave that archived copy behind, and it would reappear in Academic History.</div>`;
+          `<div class="font-bold">This term is also stored in the server archive.</div>` +
+          `<div>${serverStudents} student record${serverStudents === 1 ? '' : 's'} for this term ${serverStudents === 1 ? 'was' : 'were'} moved there by Data Management. ` +
+          `Deleting the term will also permanently delete that server archive, so nothing is left to reappear in Academic History.</div>`;
         blockedEl.classList.remove('hidden');
       } else {
         blockedEl.classList.add('hidden');
@@ -9737,7 +9737,7 @@
     }
 
     // Confirmation 2 + the final, re-checked delete.
-    function confirmDeleteTerm() {
+    async function confirmDeleteTerm() {
       if (currentRole !== 'Admin') { alert('Only an Administrator can delete a term.'); return; }
       if (!delTermCtx || delTermCtx.blockedReason) return;
       if (!delTermIsVerified()) { delTermRefreshUI(); alert('Your password confirmation has expired. Please verify it again.'); return; }
@@ -9745,9 +9745,27 @@
       if (delTermNorm(document.getElementById('delterm-phrase').value) !== delTermNorm(delTermPhrase(t))) { delTermRefreshUI(); return; }
       if (!t.locked || terms.indexOf(t) < 0) { closeDeleteTermModal(); alert('This term no longer exists or is no longer locked.'); return; }
 
+      const shownRecords = delTermCtx.records;
+      // A term moved to the server archive: delete that archive first. If it fails, nothing else is removed.
+      if (delTermCtx.serverArchived) {
+        const btn = document.getElementById('delterm-confirm-btn'), label0 = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Deleting…';
+        try { await dmCall('delete_term', { year: t.year, term: t.name }); }
+        catch (e) {
+          btn.textContent = label0;
+          if (delTermCtx) delTermRefreshUI();
+          alert('The server archive could not be deleted, so nothing was removed.\n\n' + e.message +
+            (/unknown action/i.test(e.message) ? '\n\nThe updated data-management function has not been deployed yet.' : ''));
+          return;
+        }
+        btn.textContent = label0;
+        if (!delTermCtx || delTermCtx.term !== t) return;     // dialog was closed meanwhile
+      }
+
       const label = `${t.name} (${t.year})`;
-      const removed = performTermDeletion(t);
+      const removed = Math.max(performTermDeletion(t), shownRecords);
       closeDeleteTermModal();
+      try { if (delTermCtx === null && typeof dmInit === 'function') dmInit(); } catch (e) { /* Data Management tab not in use */ }
       alert(`${label} has been permanently deleted.\n${removed} archived student record${removed === 1 ? '' : 's'} removed from Academic History.`);
     }
 
