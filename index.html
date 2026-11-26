@@ -959,10 +959,21 @@
             </div>
           </div>
 
+          <div id="student-bulk-bar" class="hidden no-print flex items-center justify-between gap-3 bg-brand-50 border border-brand-100 rounded-xl px-4 py-2.5">
+            <div class="flex items-center gap-3 text-sm">
+              <span id="student-bulk-count" class="font-bold text-brand-900">0 selected</span>
+              <button type="button" onclick="bulkClear('student')" class="text-xs font-bold text-slate-500 hover:text-slate-800 underline cursor-pointer">Clear selection</button>
+            </div>
+            <button type="button" onclick="bulkDelete('student')" class="bg-red-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2 text-sm cursor-pointer">
+              <i data-lucide="trash-2" class="w-4 h-4"></i> Delete selected
+            </button>
+          </div>
+
           <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto">
             <table class="w-full text-left text-sm text-slate-600">
               <thead class="bg-slate-50 border-b border-slate-100 text-xs text-slate-400 uppercase font-bold">
                 <tr>
+                  <th class="manage-only no-print p-4 w-10"><input type="checkbox" id="student-select-all" onchange="bulkToggleAll('student', this.checked)" title="Select all listed" aria-label="Select all" class="w-4 h-4 cursor-pointer accent-brand-600"></th>
                   <th class="p-4"></th>
                   <th class="p-4">ID</th>
                   <th class="p-4">Student Name</th>
@@ -998,10 +1009,21 @@
             </div>
           </div>
 
+          <div id="staff-bulk-bar" class="hidden no-print flex items-center justify-between gap-3 bg-brand-50 border border-brand-100 rounded-xl px-4 py-2.5">
+            <div class="flex items-center gap-3 text-sm">
+              <span id="staff-bulk-count" class="font-bold text-brand-900">0 selected</span>
+              <button type="button" onclick="bulkClear('staff')" class="text-xs font-bold text-slate-500 hover:text-slate-800 underline cursor-pointer">Clear selection</button>
+            </div>
+            <button type="button" onclick="bulkDelete('staff')" class="bg-red-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2 text-sm cursor-pointer">
+              <i data-lucide="trash-2" class="w-4 h-4"></i> Delete selected
+            </button>
+          </div>
+
           <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto">
             <table class="w-full text-left text-sm text-slate-600">
               <thead class="bg-slate-50 border-b border-slate-100 text-xs text-slate-400 uppercase font-bold">
                 <tr>
+                  <th class="manage-only no-print p-4 w-10"><input type="checkbox" id="staff-select-all" onchange="bulkToggleAll('staff', this.checked)" title="Select all listed" aria-label="Select all" class="w-4 h-4 cursor-pointer accent-brand-600"></th>
                   <th class="p-4">Staff ID</th>
                   <th class="p-4">Name</th>
                   <th class="p-4">Designation / Role</th>
@@ -5560,6 +5582,106 @@
       XLSX.writeFile(wb, 'telos-my-watchlist.xlsx');
     }
 
+    // ===================== BULK SELECT & DELETE (Admin only, Gmail-style) =====================
+    // Checkbox per row + select-all in the header; a bar appears once something is ticked.
+    // Only rows currently listed (after search/filter) can be selected, so hidden records are never
+    // deleted by accident. Deleting uses the same cleanup + refreshAllData() path as single delete,
+    // so the existing Supabase persistence/sync is reused unchanged.
+    const bulkState = {
+      student: { selected: new Set(), visible: [], last: null, label: 'student', plural: 'students' },
+      staff:   { selected: new Set(), visible: [], last: null, label: 'staff member', plural: 'staff members' }
+    };
+
+    function bulkPrepare(kind, rows) {
+      const st = bulkState[kind];
+      st.visible = rows.map(r => r.id);
+      if (!canManageRecords()) { st.selected.clear(); return; }
+      const vis = new Set(st.visible);
+      st.selected.forEach(id => { if (!vis.has(id)) st.selected.delete(id); });
+    }
+
+    function bulkCell(kind, id) {
+      if (!canManageRecords()) return '';
+      const checked = bulkState[kind].selected.has(id) ? 'checked' : '';
+      return `<td class="p-4 w-10 no-print" onclick="event.stopPropagation()"><input type="checkbox" data-bulk-id="${esc(id)}" ${checked} onclick="bulkRowClick(event, '${kind}', this.dataset.bulkId)" aria-label="Select record" class="w-4 h-4 cursor-pointer accent-brand-600"></td>`;
+    }
+
+    function bulkRowClick(e, kind, id) {
+      e.stopPropagation();
+      const st = bulkState[kind];
+      const on = e.target.checked;
+      if (e.shiftKey && st.last && st.visible.includes(st.last) && st.visible.includes(id)) {
+        const a = st.visible.indexOf(st.last), b = st.visible.indexOf(id);
+        st.visible.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(x => { if (on) st.selected.add(x); else st.selected.delete(x); });
+      } else if (on) st.selected.add(id); else st.selected.delete(id);
+      st.last = id;
+      bulkSync(kind);
+    }
+
+    function bulkToggleAll(kind, on) {
+      const st = bulkState[kind];
+      st.visible.forEach(id => { if (on) st.selected.add(id); else st.selected.delete(id); });
+      bulkSync(kind);
+    }
+
+    function bulkClear(kind) {
+      bulkState[kind].selected.clear();
+      bulkState[kind].last = null;
+      bulkSync(kind);
+    }
+
+    function bulkSync(kind) {
+      const st = bulkState[kind];
+      const tbody = document.getElementById(kind + '-table-body');
+      if (tbody) {
+        tbody.querySelectorAll('input[data-bulk-id]').forEach(cb => {
+          const on = st.selected.has(cb.dataset.bulkId);
+          cb.checked = on;
+          const tr = cb.closest('tr');
+          if (tr) tr.classList.toggle('bg-brand-50', on);
+        });
+      }
+      const total = st.visible.length, n = st.selected.size;
+      const all = document.getElementById(kind + '-select-all');
+      if (all) {
+        all.checked = total > 0 && n === total;
+        all.indeterminate = n > 0 && n < total;
+        all.disabled = total === 0;
+      }
+      const bar = document.getElementById(kind + '-bulk-bar');
+      if (bar) {
+        bar.classList.toggle('hidden', n === 0 || !canManageRecords());
+        const c = document.getElementById(kind + '-bulk-count');
+        if (c) c.textContent = n + ' selected' + (n < total ? ' of ' + total : '');
+      }
+    }
+
+    function bulkDelete(kind) {
+      if (!canManageRecords()) return;
+      const st = bulkState[kind];
+      const ids = st.visible.filter(id => st.selected.has(id));
+      if (!ids.length) return;
+      let msg = `Delete ${ids.length} ${ids.length === 1 ? st.label : st.plural}? This cannot be undone.`;
+      if (kind === 'student') msg += '\n\nTheir scores, attendance records and remarks will also be removed.';
+      if (!confirm(msg)) return;
+      const gone = new Set(ids);
+      if (kind === 'student') {
+        studentList = studentList.filter(x => !gone.has(x.id));
+        ids.forEach(id => {
+          delete assessmentScores[id];
+          delete attendanceRecords[id];
+          delete headRemarks[id];
+          delete classTeacherRemarks[id];
+          delete promotedTo[id];
+        });
+      } else {
+        staffList = staffList.filter(x => !gone.has(x.id));
+      }
+      st.selected.clear();
+      st.last = null;
+      refreshAllData();
+    }
+
     // --- Staff Directory Logic ---
     function renderStaffList() {
       const q = (document.getElementById('staff-search').value || '').toLowerCase();
@@ -5575,8 +5697,10 @@
         (s.residence && s.residence.toLowerCase().includes(q))
       );
 
+      bulkPrepare('staff', filtered);
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="p-6 text-center text-slate-400">No staff members found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="p-6 text-center text-slate-400">No staff members found.</td></tr>`;
+        bulkSync('staff');
         return;
       }
 
@@ -5584,6 +5708,7 @@
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-slate-50 transition-colors cursor-pointer';
         tr.title = 'Click to view staff profile';
+        tr.className += bulkState.staff.selected.has(s.id) ? ' bg-brand-50' : '';
         tr.onclick = () => openStaffProfileModal(s.id);
         const manageButtons = canManageRecords()
           ? `<button onclick="event.stopPropagation(); editStaff('${esc(s.id)}')" class="text-brand-600 hover:text-brand-800 font-bold text-xs cursor-pointer">Edit</button>
@@ -5591,6 +5716,7 @@
           : '';
         const actions = `<button onclick="event.stopPropagation(); openStaffProfileModal('${esc(s.id)}')" class="text-slate-500 hover:text-brand-700 font-bold text-xs cursor-pointer">View</button> ${manageButtons}`;
         tr.innerHTML = `
+          ${bulkCell('staff', s.id)}
           <td class="p-4 font-mono font-bold text-brand-900">${esc(s.id)}</td>
           <td class="p-4 font-semibold text-slate-800">${esc(s.name)}</td>
           <td class="p-4"><span class="bg-brand-50 text-brand-700 px-2.5 py-1 rounded-md text-xs font-bold">${esc(s.role)}</span></td>
@@ -5602,6 +5728,7 @@
         `;
         tbody.appendChild(tr);
       });
+      bulkSync('staff');
     }
 
     let currentProfileStaffId = null;
@@ -6317,8 +6444,10 @@
         (!statusFilter || (s.status || 'Active') === statusFilter)
       );
 
+      bulkPrepare('student', filtered);
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" class="p-6 text-center text-slate-400">No students found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" class="p-6 text-center text-slate-400">No students found.</td></tr>`;
+        bulkSync('student');
         return;
       }
 
@@ -6333,6 +6462,7 @@
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-slate-50 transition-colors cursor-pointer';
         tr.title = 'Click to view student profile and academic history';
+        tr.className += bulkState.student.selected.has(s.id) ? ' bg-brand-50' : '';
         tr.onclick = () => openStudentProfileModal(s.id);
         const manageButtons = canManageRecords()
           ? `<button onclick="event.stopPropagation(); editStudent('${esc(s.id)}')" class="text-brand-600 hover:text-brand-800 font-bold text-xs cursor-pointer">Edit</button>
@@ -6345,6 +6475,7 @@
           ? `<img src="${esc(s.photo)}" alt="${esc(s.name)}" class="w-9 h-9 rounded-full object-cover border border-slate-200">`
           : `<div class="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-300"><i data-lucide="user-round" class="w-4 h-4"></i></div>`;
         tr.innerHTML = `
+          ${bulkCell('student', s.id)}
           <td class="p-4">${photoCell}</td>
           <td class="p-4 font-mono font-bold text-brand-900">${esc(s.id)}</td>
           <td class="p-4 font-semibold text-slate-800 hover:text-brand-600 hover:underline">${esc(s.name)}</td>
@@ -6357,6 +6488,7 @@
         `;
         tbody.appendChild(tr);
       });
+      bulkSync('student');
       if (window.lucide) lucide.createIcons();
     }
 
