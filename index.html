@@ -5872,7 +5872,7 @@
         file: 'student-bulk-template.xlsx',
         headers: ['First Name', 'Last Name', 'Other Names', 'Date of Birth', 'Gender', 'Class', 'Admission Date', 'Parent/Guardian Name', 'Parent/Guardian Relation'],
         example: ['#EXAMPLE - delete this row', 'Mensah', 'Kwame', '2015-04-23', 'Male', '', '2026-09-08', 'Ama Mensah', 'Mother'],
-        desc: 'Required: First Name, Last Name, Date of Birth (YYYY-MM-DD or DD/MM/YYYY) and Gender (Male/Female). Class is optional: pick it from the dropdown in the Class column (it lists the classes already set up in the system; download a fresh template if you add new classes). Everything else is optional and can be completed later. Student IDs are generated automatically.',
+        desc: 'Required: First Name, Last Name and Gender (Male/Female). Date of Birth and Admission Date are optional (use YYYY-MM-DD or DD/MM/YYYY if you fill them in; a blank Admission Date defaults to today). Class is optional: pick it from the dropdown in the Class column (it lists the classes already set up in the system; download a fresh template if you add new classes). Everything else is optional and can be completed later. Student IDs are generated automatically.',
         aliases: {
           firstname: 'firstName', lastname: 'lastName', surname: 'lastName', othernames: 'otherNames', middlename: 'otherNames',
           dateofbirth: 'dob', dob: 'dob', gender: 'gender', sex: 'gender', class: 'class', classgrade: 'class', grade: 'class',
@@ -5880,7 +5880,7 @@
           parentguardianrelation: 'guardianRelation', guardianrelation: 'guardianRelation', relation: 'guardianRelation',
           parentguardianphone: 'phone', parentphone: 'phone', contactphone: 'phone', phone: 'phone'
         },
-        required: ['firstName', 'lastName', 'dob', 'gender']
+        required: ['firstName', 'lastName', 'gender']
       },
       staff: {
         label: 'Staff',
